@@ -43,6 +43,7 @@ from verixa_runtime.gateway.envelopes import (  # noqa: F401
 from verixa_runtime.gateway.govern import (  # noqa: F401
     decide_phase0,
     decide_via_router,
+    decide_via_router_with_triad,
     router as govern_router,
 )
 from verixa_runtime.gateway.logging import (  # noqa: F401
@@ -72,6 +73,7 @@ __all__ = [
     "chat_router",
     "decide_phase0",
     "decide_via_router",
+    "decide_via_router_with_triad",
     "govern_router",
     "parse_api_key_env",
 ]

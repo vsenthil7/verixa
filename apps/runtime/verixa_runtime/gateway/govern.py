@@ -42,6 +42,11 @@ from verixa_runtime.gateway.envelopes import (
 )
 from verixa_runtime.policy.client import PolicyDecision
 from verixa_runtime.risk.router import RouterInputs, route_decision
+from verixa_runtime.triad.orchestrator import (
+    TriadOrchestrator,
+    consensus_to_decision,
+)
+from verixa_runtime.triad.protocol import VerdictDecision
 
 
 router = APIRouter(prefix="/v1/runtime", tags=["runtime"])
@@ -192,5 +197,100 @@ def govern(req: GovernRequest) -> GovernResponse:
     so only firewall outcomes can flip ALLOW to DENY at the HTTP level.
     Direct callers of ``decide_via_router`` (tests, CP-12) can inject
     policy decisions to exercise R2/R3 paths.
+
+    CP-10.5: triad invocation is exposed via ``decide_via_router_with_triad``
+    (async); the HTTP endpoint stays sync because no triad is wired in
+    by default at Phase-0 (the orchestrator is constructed by callers
+    that have an event loop and a live droplet, e.g. an async demo
+    harness or CP-10.4 integration test).
     """
     return decide_via_router(req)
+
+
+# ---------------------------------------------------------------------------
+# CP-10.5 -- triad-aware decision (async; ESCALATE -> triad consensus)
+# ---------------------------------------------------------------------------
+
+
+async def decide_via_router_with_triad(
+    req: GovernRequest,
+    *,
+    triad: TriadOrchestrator,
+    registry: list[ToolRegistryEntry] | None = None,
+    policy_decisions: Iterable[tuple[str, PolicyDecision]] = (),
+) -> GovernResponse:
+    """Run the sync router; if it ESCALATEs, invoke the triad and let
+    the consensus decide.
+
+    Workflow:
+      1. Run ``decide_via_router`` synchronously to get the baseline
+         response.
+      2. If decision != ESCALATE, return the response unchanged --
+         firewall denies and policy fails terminate immediately
+         without triad cost.
+      3. If decision == ESCALATE, await ``triad.run(audit_id=...)``,
+         translate consensus to a VerdictDecision via
+         ``consensus_to_decision``:
+           - ALLOW or DENY: override the response with the triad's
+             chosen decision; triad_invoked=True; triad_consensus =
+             ConsensusKind.value ("unanimous"/"majority")
+           - ESCALATE (SPLIT or INTEGRITY_FAILURE or genuine ESCALATE
+             vote): leave the response as ESCALATE; surface
+             triad_consensus = "split"/"integrity_failure"/"escalate"
+
+    The triad's commitments are NOT yet persisted to the audit ledger
+    here (CP-12 wires the audit emitter and passes it as the
+    ``audit_emit`` kwarg into ``triad.run``). For now the function
+    accepts triad as a kwarg so a test or demo harness can construct
+    one with MockReviewer or live OpenAICompatReviewer instances.
+    """
+    base = decide_via_router(
+        req, registry=registry, policy_decisions=policy_decisions
+    )
+    if base.decision != Decision.ESCALATE:
+        return base
+    outcome = await triad.run(
+        audit_id=base.audit_id,
+        governed_action_summary=_summarise_request_for_triad(req),
+    )
+    triad_decision = consensus_to_decision(outcome)
+    triad_consensus_label = outcome.consensus.kind.value
+    if triad_decision == VerdictDecision.ESCALATE:
+        # Triad couldn't reach consensus or all three voted escalate;
+        # leave the response as ESCALATE but surface the triad outcome.
+        return base.model_copy(
+            update={
+                "triad_invoked": True,
+                "triad_consensus": triad_consensus_label,
+            }
+        )
+    # Triad reached consensus on ALLOW or DENY -> override.
+    overridden_decision = (
+        Decision.ALLOW
+        if triad_decision == VerdictDecision.ALLOW
+        else Decision.DENY
+    )
+    return base.model_copy(
+        update={
+            "decision": overridden_decision,
+            "triad_invoked": True,
+            "triad_consensus": triad_consensus_label,
+        }
+    )
+
+
+def _summarise_request_for_triad(req: GovernRequest) -> str:
+    """Render the GovernRequest into a short string for reviewer prompts.
+
+    Phase-0 includes the bare minimum a reviewer needs to opine on the
+    action: tool name, action type, and the workflow / agent role.
+    Full action.arguments + retrieved-document context arrive in CP-11
+    (Evidence Validator) and CP-12 (Replay Vault) where the reviewer
+    can inspect the grounding evidence too.
+    """
+    return (
+        f"action.type={req.action.type} "
+        f"tool_name={req.action.tool_name or '<none>'} "
+        f"role={req.agent_identity.role} "
+        f"workflow_id={req.agent_identity.workflow_id}"
+    )
