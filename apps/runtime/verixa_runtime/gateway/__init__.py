@@ -30,6 +30,10 @@ from verixa_runtime.gateway.envelopes import (  # noqa: F401
     PolicyResult,
     RiskClassification,
 )
+from verixa_runtime.gateway.govern import (  # noqa: F401
+    decide_phase0,
+    router as govern_router,
+)
 
 __all__ = [
     "AgentIdentity",
@@ -40,4 +44,6 @@ __all__ = [
     "GovernResponse",
     "PolicyResult",
     "RiskClassification",
+    "decide_phase0",
+    "govern_router",
 ]
