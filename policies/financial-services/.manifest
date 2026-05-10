@@ -1,0 +1,14 @@
+{
+  "revision": "fs-v1.0.0",
+  "roots": ["verixa/fs"],
+  "metadata": {
+    "name": "verixa-financial-services",
+    "description": "Financial-services compliance policies: transfer limits by role, beneficiary verification.",
+    "version": "1.0.0",
+    "compliance_pack": "financial_services",
+    "regulatory_mappings": [
+      {"framework": "FFIEC", "control": "RM.AUTH-1"},
+      {"framework": "PSD2", "control": "Art_97_SCA"}
+    ]
+  }
+}
