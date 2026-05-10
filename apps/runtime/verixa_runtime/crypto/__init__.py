@@ -5,6 +5,7 @@ Three primitives ship in this package, each in its own module:
 - `ed25519`      — Ed25519 sign/verify (audit-ledger signatures)
 - `hash_chain`   — SHA-256 hash chain (audit-ledger integrity)
 - `aes_gcm`      — AES-256-GCM encrypt/decrypt (replay-vault snapshots)
+- `key_bootstrap` — tenant-onboarding key generation (dev mode)
 
 Plus a key-bootstrap utility for dev-mode tenant key-pair generation
 (production uses HashiCorp Vault transit / customer-supplied KMS).
@@ -48,6 +49,11 @@ from verixa_runtime.crypto.hash_chain import (  # noqa: F401
     compute_self_hash,
     verify_chain,
 )
+from verixa_runtime.crypto.key_bootstrap import (  # noqa: F401
+    TenantKeyBundle,
+    bootstrap_tenant,
+    derive_signing_key_id,
+)
 
 __all__ = [
     "AesGcmCiphertext",
@@ -57,9 +63,12 @@ __all__ = [
     "Ed25519SignatureError",
     "HashChainBrokenError",
     "HashChainEntry",
+    "TenantKeyBundle",
+    "bootstrap_tenant",
     "compute_genesis_prev",
     "compute_self_hash",
     "decrypt",
+    "derive_signing_key_id",
     "encrypt",
     "generate_key",
     "generate_keypair",
