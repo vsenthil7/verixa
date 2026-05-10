@@ -216,18 +216,22 @@ def test_verify_reveal_tampered_verdict_rejected() -> None:
 
 
 def test_verify_reveal_label_swap_rejected() -> None:
-    """Commitment from REVIEWER_A cannot be revealed as REVIEWER_B's
-    verdict, even if the bytes happen to align."""
+    """Commitment.reviewer_id must equal verdict.reviewer_id; this is
+    the first guard in verify_reveal and a defence against an
+    orchestrator that hands the wrong reviewer's verdict to a
+    commitment.
+
+    Setup: build a real (binding) commitment for REVIEWER_A. Then try
+    to verify it against a verdict whose reviewer_id is REVIEWER_B.
+    The reviewer_id mismatch must short-circuit to False before the
+    hash recompute even runs.
+    """
     v_a = _make_verdict(reviewer_id=ReviewerId.REVIEWER_A)
-    v_b = _make_verdict(reviewer_id=ReviewerId.REVIEWER_B)
     nonce = _zero_nonce()
-    c_a = compute_commitment(v_a, nonce)
-    # Even though c_a's hex is computed for v_a, claiming it belongs to
-    # REVIEWER_B should fail at the reviewer-id pairing check.
-    c_a_mislabelled = Commitment(
-        reviewer_id=ReviewerId.REVIEWER_B, sha256_hex=c_a.sha256_hex
-    )
-    assert verify_reveal(c_a_mislabelled, v_b, nonce) is False
+    c_a = compute_commitment(v_a, nonce)  # reviewer_id=REVIEWER_A
+    # A different verdict whose reviewer_id is REVIEWER_B.
+    v_b = _make_verdict(reviewer_id=ReviewerId.REVIEWER_B)
+    assert verify_reveal(c_a, v_b, nonce) is False
 
 
 def test_verify_reveal_wrong_nonce_length_rejected() -> None:
