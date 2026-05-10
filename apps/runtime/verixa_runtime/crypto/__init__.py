@@ -33,11 +33,23 @@ from verixa_runtime.crypto.ed25519 import (  # noqa: F401
     sign,
     verify,
 )
+from verixa_runtime.crypto.hash_chain import (  # noqa: F401
+    HashChainBrokenError,
+    HashChainEntry,
+    compute_genesis_prev,
+    compute_self_hash,
+    verify_chain,
+)
 
 __all__ = [
     "Ed25519KeyPair",
     "Ed25519SignatureError",
+    "HashChainBrokenError",
+    "HashChainEntry",
+    "compute_genesis_prev",
+    "compute_self_hash",
     "generate_keypair",
     "sign",
     "verify",
+    "verify_chain",
 ]
