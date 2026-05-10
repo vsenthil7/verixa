@@ -72,9 +72,16 @@ from verixa_runtime.triad.reviewer import (  # noqa: F401
     ReviewerConfig,
     ReviewerError,
 )
+from verixa_runtime.triad.orchestrator import (  # noqa: F401
+    AuditEmitCommitments,
+    TriadOrchestrator,
+    TriadOutcome,
+    consensus_to_decision,
+)
 
 
 __all__ = [
+    "AuditEmitCommitments",
     "Commitment",
     "ConsensusKind",
     "ConsensusOutcome",
@@ -85,10 +92,13 @@ __all__ = [
     "ReviewerError",
     "ReviewerId",
     "ReviewerVerdict",
+    "TriadOrchestrator",
+    "TriadOutcome",
     "VerdictDecision",
     "canonicalise_verdict",
     "compute_commitment",
     "compute_consensus",
+    "consensus_to_decision",
     "generate_nonce",
     "verify_reveal",
 ]
