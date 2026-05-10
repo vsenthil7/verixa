@@ -1,43 +1,45 @@
-[tool.poetry]
+[project]
 name = "verixa-monorepo"
 version = "0.1.0"
 description = "Verixa — enterprise AI runtime control plane and trust platform (Phase 0 hackathon prototype on AMD MI300X)"
-authors = ["v_sen <v_sen@verixa.dev>"]
+authors = [{ name = "v_sen", email = "v_sen@verixa.dev" }]
 license = "MIT"
 readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    # Web + API
+    "fastapi (>=0.115.0,<0.116.0)",
+    "uvicorn[standard] (>=0.32.0,<0.33.0)",
+    "pydantic (>=2.9.0,<3.0.0)",
+    "pydantic-settings (>=2.6.0,<3.0.0)",
+    # DB
+    "sqlalchemy[asyncio] (>=2.0.36,<3.0.0)",
+    "asyncpg (>=0.30.0,<0.31.0)",
+    "alembic (>=1.14.0,<2.0.0)",
+    # Crypto
+    "cryptography (>=43.0.3,<44.0.0)",
+    "pynacl (>=1.5.0,<2.0.0)",
+    # Background jobs
+    "celery (>=5.4.0,<6.0.0)",
+    "redis (>=5.2.0,<6.0.0)",
+    # Object store
+    "minio (>=7.2.10,<8.0.0)",
+    # Policy engine client
+    "httpx (>=0.27.2,<0.28.0)",
+    # YAML config
+    "pyyaml (>=6.0.2,<7.0.0)",
+    # Structured logging
+    "structlog (>=24.4.0,<25.0.0)",
+    # OpenAI-compatible client (for vLLM-on-ROCm calls)
+    "openai (>=1.54.0,<2.0.0)",
+]
+
+[tool.poetry]
 packages = [
     { include = "verixa", from = "packages/verixa-python" },
     { include = "verixa_runtime", from = "apps/runtime" },
     { include = "verixa_control_plane", from = "apps/control-plane-api" },
 ]
-
-[tool.poetry.dependencies]
-python = "^3.12"
-# Web + API
-fastapi = "^0.115.0"
-uvicorn = { extras = ["standard"], version = "^0.32.0" }
-pydantic = "^2.9.0"
-pydantic-settings = "^2.6.0"
-# DB
-sqlalchemy = { extras = ["asyncio"], version = "^2.0.36" }
-asyncpg = "^0.30.0"
-alembic = "^1.14.0"
-# Crypto
-cryptography = "^43.0.3"
-pynacl = "^1.5.0"  # Ed25519
-# Background jobs
-celery = "^5.4.0"
-redis = "^5.2.0"
-# Object store
-minio = "^7.2.10"
-# Policy engine client
-httpx = "^0.27.2"
-# YAML config
-pyyaml = "^6.0.2"
-# Structured logging
-structlog = "^24.4.0"
-# OpenAI-compatible client (for vLLM-on-ROCm calls)
-openai = "^1.54.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
@@ -47,11 +49,10 @@ hypothesis = "^6.115.0"
 schemathesis = "^3.39.0"
 ruff = "^0.7.0"
 mypy = "^1.13.0"
-testcontainers = { extras = ["postgres", "redis"], version = "^4.8.0" }
 freezegun = "^1.5.1"
 
 [build-system]
-requires = ["poetry-core>=1.9.0"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
@@ -75,7 +76,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S101", "S105", "S106"]  # asserts and test fixtures
+"**/tests/**" = ["S101", "S105", "S106"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -98,6 +99,7 @@ addopts = [
     "--cov=verixa_control_plane",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
+    "--cov-branch",
 ]
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
@@ -105,9 +107,18 @@ markers = [
     "e2e: end-to-end tests requiring full stack",
     "live_mi300x: tests against live AMD MI300X droplet (requires network + endpoint config)",
 ]
+pythonpath = [
+    "packages/verixa-python",
+    "apps/runtime",
+    "apps/control-plane-api",
+]
 
 [tool.coverage.run]
-source = ["packages/verixa-python/verixa", "apps/runtime/verixa_runtime", "apps/control-plane-api/verixa_control_plane"]
+source = [
+    "packages/verixa-python/verixa",
+    "apps/runtime/verixa_runtime",
+    "apps/control-plane-api/verixa_control_plane",
+]
 omit = ["*/tests/*", "*/_backup/*"]
 branch = true
 
