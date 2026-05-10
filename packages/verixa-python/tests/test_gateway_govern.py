@@ -1,8 +1,11 @@
-"""pytest suite for verixa_runtime.gateway.govern (CP-6.2).
+"""pytest suite for verixa_runtime.gateway.govern (CP-6.2 + CP-6.4 auth).
 
 Tests both the pure decision function `decide_phase0` and the wired
 endpoint via FastAPI TestClient. 100% line + branch coverage on
 gateway/govern.py and gateway/__init__.py.
+
+CP-6.4 added API-key middleware; tests inject a known key via
+`create_app(api_keys=...)` and pass the `X-Verixa-API-Key` header.
 """
 
 from __future__ import annotations
@@ -30,9 +33,19 @@ from verixa_runtime.gateway import (
 # ---------------------------------------------------------------------------
 
 
+TEST_API_KEY = "test-key-govern"
+TEST_TENANT_ID = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01")
+
+
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app())
+    app = create_app(api_keys={TEST_API_KEY: TEST_TENANT_ID})
+    return TestClient(app)
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"X-Verixa-API-Key": TEST_API_KEY}
 
 
 def _wf_id() -> uuid.UUID:
@@ -158,9 +171,11 @@ def test_decide_phase0_latency_is_non_negative() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_endpoint_returns_200_for_valid_request(client: TestClient) -> None:
+def test_endpoint_returns_200_for_valid_request(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     payload = _request_payload_for_tool("read_account_balance")
-    r = client.post("/v1/runtime/govern", json=payload)
+    r = client.post("/v1/runtime/govern", json=payload, headers=auth_headers)
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["decision"] == "allow"
@@ -168,18 +183,22 @@ def test_endpoint_returns_200_for_valid_request(client: TestClient) -> None:
     assert "audit_id" in body
 
 
-def test_endpoint_deny_for_deny_list_tool(client: TestClient) -> None:
+def test_endpoint_deny_for_deny_list_tool(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     payload = _request_payload_for_tool("shutdown_production")
-    r = client.post("/v1/runtime/govern", json=payload)
+    r = client.post("/v1/runtime/govern", json=payload, headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["decision"] == "deny"
     assert body["reason"] == "hard_policy_breach"
 
 
-def test_endpoint_escalate_for_escalate_list_tool(client: TestClient) -> None:
+def test_endpoint_escalate_for_escalate_list_tool(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     payload = _request_payload_for_tool("transfer_funds")
-    r = client.post("/v1/runtime/govern", json=payload)
+    r = client.post("/v1/runtime/govern", json=payload, headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["decision"] == "escalate"
@@ -188,34 +207,45 @@ def test_endpoint_escalate_for_escalate_list_tool(client: TestClient) -> None:
 
 
 def test_endpoint_returns_422_for_missing_required_field(
-    client: TestClient,
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     bad_payload = _request_payload_for_tool("read_x")
     del bad_payload["trace_id"]
-    r = client.post("/v1/runtime/govern", json=bad_payload)
+    r = client.post(
+        "/v1/runtime/govern", json=bad_payload, headers=auth_headers
+    )
     assert r.status_code == 422
 
 
-def test_endpoint_returns_422_for_extra_field(client: TestClient) -> None:
+def test_endpoint_returns_422_for_extra_field(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     bad_payload = _request_payload_for_tool("read_x")
     bad_payload["extra_unknown"] = "boom"
-    r = client.post("/v1/runtime/govern", json=bad_payload)
+    r = client.post(
+        "/v1/runtime/govern", json=bad_payload, headers=auth_headers
+    )
     assert r.status_code == 422
 
 
 def test_endpoint_returns_422_for_short_prompt_hash(
-    client: TestClient,
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     bad_payload = _request_payload_for_tool("read_x")
     bad_payload["context"]["prompt_hash"] = "ab"  # too short
-    r = client.post("/v1/runtime/govern", json=bad_payload)
+    r = client.post(
+        "/v1/runtime/govern", json=bad_payload, headers=auth_headers
+    )
     assert r.status_code == 422
 
 
 def test_operational_endpoints_still_work_after_router_mount(
     client: TestClient,
 ) -> None:
-    """CP-2.5 health/version/metrics must not regress after mounting govern."""
+    """CP-2.5 health/version/metrics must not regress after mounting govern.
+
+    Operational endpoints bypass auth, so no header needed.
+    """
     assert client.get("/healthz").status_code == 200
     assert client.get("/readyz").status_code == 200
     assert client.get("/version").status_code == 200

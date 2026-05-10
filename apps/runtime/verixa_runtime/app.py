@@ -6,9 +6,11 @@ CP-2.5 ships only the operational endpoints:
   - GET /metrics      Prometheus exposition (text format 0.0.4)
   - GET /version      build + version info
 
-CP-6 adds the governance endpoints:
+CP-6 adds the governance endpoints + middleware:
   - POST /v1/runtime/govern        primary governed-action endpoint (CP-6.2)
   - POST /v1/chat/completions      OpenAI-compatible proxy (CP-6.3)
+  - ApiKeyMiddleware               X-Verixa-API-Key auth (CP-6.4)
+  - StructuredLoggingMiddleware    JSON request logs (CP-6.4)
 
 The gateway is structured so adding routes later doesn't break the
 operational endpoints or their tests.
@@ -25,7 +27,12 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from verixa_runtime import __version__
-from verixa_runtime.gateway import chat_router, govern_router
+from verixa_runtime.gateway import (
+    ApiKeyMiddleware,
+    StructuredLoggingMiddleware,
+    chat_router,
+    govern_router,
+)
 
 SERVICE_NAME = "verixa-runtime"
 
@@ -48,8 +55,16 @@ def _default_ready_check() -> bool:
     return True
 
 
-def create_app(ready_check: ReadinessCheck | None = None) -> FastAPI:
-    """Build the FastAPI app. `ready_check` is dependency-injected for tests."""
+def create_app(
+    ready_check: ReadinessCheck | None = None,
+    api_keys: dict | None = None,
+) -> FastAPI:
+    """Build the FastAPI app.
+
+    `ready_check` is dependency-injected for tests.
+    `api_keys` is dependency-injected for tests; pass {api_key: tenant_id}
+    to override the env-driven default.
+    """
     check = ready_check if ready_check is not None else _default_ready_check
 
     app = FastAPI(
@@ -65,11 +80,17 @@ def create_app(ready_check: ReadinessCheck | None = None) -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    # Mount the governance + chat routers (CP-6.2/6.3). Operational
-    # endpoints below remain at the root path so health probes don't
-    # shift across builds.
+    # Mount the governance + chat routers (CP-6.2/6.3).
     app.include_router(govern_router)
     app.include_router(chat_router)
+
+    # Middleware. Starlette runs the LAST-ADDED middleware as the
+    # OUTERMOST wrapper. We want the request flow:
+    #     incoming -> StructuredLogging -> ApiKey -> route
+    # so logging captures auth outcomes. That means we add auth FIRST,
+    # then logging.
+    app.add_middleware(ApiKeyMiddleware, keys=api_keys)
+    app.add_middleware(StructuredLoggingMiddleware)
 
     @app.get("/healthz")
     def healthz() -> dict[str, Any]:

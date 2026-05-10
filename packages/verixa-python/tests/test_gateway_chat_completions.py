@@ -1,4 +1,4 @@
-"""pytest suite for verixa_runtime.gateway.chat_completions (CP-6.3).
+"""pytest suite for verixa_runtime.gateway.chat_completions (CP-6.3 + CP-6.4 auth).
 
 The upstream HTTP call goes through `_proxy_to_upstream` which we
 monkey-patch in tests so the test suite never hits the live MI300X
@@ -10,6 +10,7 @@ Live droplet integration is exercised separately under the
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 from unittest.mock import patch
 
@@ -26,9 +27,19 @@ from verixa_runtime.gateway import chat_completions as chat_module
 # ---------------------------------------------------------------------------
 
 
+TEST_API_KEY = "test-key-chat"
+TEST_TENANT_ID = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa02")
+
+
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(create_app())
+    app = create_app(api_keys={TEST_API_KEY: TEST_TENANT_ID})
+    return TestClient(app)
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    return {"X-Verixa-API-Key": TEST_API_KEY}
 
 
 def _valid_chat_payload() -> dict[str, Any]:
@@ -87,21 +98,24 @@ def test_upstream_base_url_overridden_by_env(
 
 
 def test_endpoint_proxies_and_attaches_verixa_metadata(
-    client: TestClient,
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     with patch.object(
         chat_module, "_proxy_to_upstream", _make_proxy_stub()
     ):
-        r = client.post("/v1/chat/completions", json=_valid_chat_payload())
+        r = client.post(
+            "/v1/chat/completions",
+            json=_valid_chat_payload(),
+            headers=auth_headers,
+        )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["id"] == "chatcmpl-test"
     assert body["choices"][0]["message"]["content"] == "Hi there!"
-    # Verixa metadata attached
     assert "_verixa" in body
     assert body["_verixa"]["phase"] == "0"
     assert body["_verixa"]["latency_ms"] >= 0
-    assert body["_verixa"]["audit_id"] is None  # CP-12 wires real audit_id
+    assert body["_verixa"]["audit_id"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -109,24 +123,32 @@ def test_endpoint_proxies_and_attaches_verixa_metadata(
 # ---------------------------------------------------------------------------
 
 
-def test_endpoint_returns_400_for_invalid_json(client: TestClient) -> None:
+def test_endpoint_returns_400_for_invalid_json(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
     r = client.post(
         "/v1/chat/completions",
         content=b"this is not json",
-        headers={"content-type": "application/json"},
+        headers={"content-type": "application/json", **auth_headers},
     )
     assert r.status_code == 400
     assert "invalid JSON body" in r.text
 
 
-def test_endpoint_returns_400_for_non_object_body(client: TestClient) -> None:
-    r = client.post("/v1/chat/completions", json=[1, 2, 3])
+def test_endpoint_returns_400_for_non_object_body(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.post("/v1/chat/completions", json=[1, 2, 3], headers=auth_headers)
     assert r.status_code == 400
     assert "must be a JSON object" in r.text
 
 
-def test_endpoint_returns_400_for_missing_messages(client: TestClient) -> None:
-    r = client.post("/v1/chat/completions", json={"model": "x"})
+def test_endpoint_returns_400_for_missing_messages(
+    client: TestClient, auth_headers: dict[str, str]
+) -> None:
+    r = client.post(
+        "/v1/chat/completions", json={"model": "x"}, headers=auth_headers
+    )
     assert r.status_code == 400
     assert "missing required field: messages" in r.text
 
@@ -137,7 +159,7 @@ def test_endpoint_returns_400_for_missing_messages(client: TestClient) -> None:
 
 
 def test_endpoint_returns_502_on_upstream_http_error(
-    client: TestClient,
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     async def _raise_connect_error(
         base_url: str, body: dict, timeout: float
@@ -147,14 +169,18 @@ def test_endpoint_returns_502_on_upstream_http_error(
     with patch.object(
         chat_module, "_proxy_to_upstream", _raise_connect_error
     ):
-        r = client.post("/v1/chat/completions", json=_valid_chat_payload())
+        r = client.post(
+            "/v1/chat/completions",
+            json=_valid_chat_payload(),
+            headers=auth_headers,
+        )
     assert r.status_code == 502
     assert "upstream vLLM error" in r.text
     assert "ConnectError" in r.text
 
 
 def test_endpoint_returns_502_when_upstream_returns_non_200(
-    client: TestClient,
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     error_body = {"error": {"message": "model not found", "type": "not_found"}}
     with patch.object(
@@ -162,7 +188,11 @@ def test_endpoint_returns_502_when_upstream_returns_non_200(
         "_proxy_to_upstream",
         _make_proxy_stub(status_code=404, body=error_body),
     ):
-        r = client.post("/v1/chat/completions", json=_valid_chat_payload())
+        r = client.post(
+            "/v1/chat/completions",
+            json=_valid_chat_payload(),
+            headers=auth_headers,
+        )
     assert r.status_code == 502
     assert "upstream returned 404" in r.text
 
@@ -179,12 +209,11 @@ def test_openapi_schema_includes_chat_completions(client: TestClient) -> None:
 
 
 def test_operational_endpoints_still_work_with_chat_router(
-    client: TestClient,
+    client: TestClient, auth_headers: dict[str, str]
 ) -> None:
     """CP-2.5 endpoints + CP-6.2 govern must not regress when chat mounts."""
     assert client.get("/healthz").status_code == 200
     assert client.get("/readyz").status_code == 200
-    # govern endpoint still reachable
     govern_payload = {
         "agent_identity": {
             "spiffe_id": "spiffe://x",
@@ -195,7 +224,12 @@ def test_operational_endpoints_still_work_with_chat_router(
         "context": {"prompt_hash": "b" * 64, "model_version": "m"},
         "trace_id": "t",
     }
-    assert client.post("/v1/runtime/govern", json=govern_payload).status_code == 200
+    assert (
+        client.post(
+            "/v1/runtime/govern", json=govern_payload, headers=auth_headers
+        ).status_code
+        == 200
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -208,12 +242,7 @@ async def test_proxy_to_upstream_real_call_via_mock_transport(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Exercise the real `_proxy_to_upstream` (lines 59-62) by injecting an
-    httpx MockTransport into the AsyncClient construction path.
-
-    We patch `httpx.AsyncClient` at the chat_completions module level so
-    that when `_proxy_to_upstream` constructs `httpx.AsyncClient(timeout=...)`,
-    it gets back a client backed by our mock transport.
-    """
+    httpx MockTransport into the AsyncClient construction path."""
     captured: dict[str, Any] = {}
 
     def _handler(request: httpx.Request) -> httpx.Response:
@@ -235,7 +264,6 @@ async def test_proxy_to_upstream_real_call_via_mock_transport(
         )
 
     transport = httpx.MockTransport(_handler)
-
     real_async_client = httpx.AsyncClient
 
     def _async_client_with_transport(*args: Any, **kwargs: Any) -> httpx.AsyncClient:
@@ -246,8 +274,6 @@ async def test_proxy_to_upstream_real_call_via_mock_transport(
         chat_module.httpx, "AsyncClient", _async_client_with_transport
     )
 
-    # Now call the REAL `_proxy_to_upstream` — its body (lines 59-62)
-    # constructs the AsyncClient (now patched), posts, returns.
     status, body = await chat_module._proxy_to_upstream(
         "http://upstream.test", {"messages": []}, 5.0
     )
@@ -281,7 +307,6 @@ async def test_proxy_to_upstream_strips_trailing_slash_in_base_url(
         chat_module.httpx, "AsyncClient", _async_client_with_transport
     )
 
-    # base_url with trailing slash must produce the same URL as without
     await chat_module._proxy_to_upstream(
         "http://upstream.test/", {"messages": []}, 5.0
     )
