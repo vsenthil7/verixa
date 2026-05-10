@@ -40,13 +40,23 @@ from verixa_runtime.replay.sealer import (  # noqa: F401
     decrypt_bundle,
     encrypt_bundle,
 )
+from verixa_runtime.replay.store import (  # noqa: F401
+    BundleConflict,
+    BundleNotFound,
+    BundleStore,
+    InMemoryBundleStore,
+)
 
 
 __all__ = [
     "BUNDLE_SCHEMA_VERSION",
     "STORAGE_KEY_HEX_LEN",
     "AesGcmDecryptionError",
+    "BundleConflict",
+    "BundleNotFound",
+    "BundleStore",
     "EncryptedBundle",
+    "InMemoryBundleStore",
     "PolicyEvaluationRecord",
     "ReplayBundle",
     "TriadReviewRecord",
