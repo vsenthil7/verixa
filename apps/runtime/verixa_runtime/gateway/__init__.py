@@ -9,9 +9,9 @@ Plus the support surface: API-key auth, structured JSON logs with
 trace_id, Pydantic v2 envelopes for typed boundary validation.
 
 CP-6 sub-CPs:
-  CP-6.1 — envelope models (this commit)
+  CP-6.1 — envelope models
   CP-6.2 — /v1/runtime/govern endpoint (Phase-0 stub pipeline)
-  CP-6.3 — /v1/chat/completions OpenAI-compat proxy
+  CP-6.3 — /v1/chat/completions OpenAI-compat proxy (this commit)
   CP-6.4 — API-key auth + structured logging middleware
 
 The full pipeline (policy -> risk -> triad -> emit-audit) lands across
@@ -20,6 +20,9 @@ endpoints are reachable end-to-end, with a simple deterministic stub
 decision in CP-6.2 that becomes the real decision router in CP-9.
 """
 
+from verixa_runtime.gateway.chat_completions import (  # noqa: F401
+    router as chat_router,
+)
 from verixa_runtime.gateway.envelopes import (  # noqa: F401
     AgentIdentity,
     Decision,
@@ -44,6 +47,7 @@ __all__ = [
     "GovernResponse",
     "PolicyResult",
     "RiskClassification",
+    "chat_router",
     "decide_phase0",
     "govern_router",
 ]

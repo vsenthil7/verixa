@@ -6,8 +6,8 @@ CP-2.5 ships only the operational endpoints:
   - GET /metrics      Prometheus exposition (text format 0.0.4)
   - GET /version      build + version info
 
-CP-6+ adds the governance endpoints:
-  - POST /v1/runtime/govern        primary governed-action endpoint
+CP-6 adds the governance endpoints:
+  - POST /v1/runtime/govern        primary governed-action endpoint (CP-6.2)
   - POST /v1/chat/completions      OpenAI-compatible proxy (CP-6.3)
 
 The gateway is structured so adding routes later doesn't break the
@@ -25,7 +25,7 @@ from fastapi import FastAPI, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from verixa_runtime import __version__
-from verixa_runtime.gateway import govern_router
+from verixa_runtime.gateway import chat_router, govern_router
 
 SERVICE_NAME = "verixa-runtime"
 
@@ -65,9 +65,11 @@ def create_app(ready_check: ReadinessCheck | None = None) -> FastAPI:
         openapi_url="/openapi.json",
     )
 
-    # Mount the governance router (CP-6.2+). Operational endpoints below
-    # remain at the root path so health probes don't shift across builds.
+    # Mount the governance + chat routers (CP-6.2/6.3). Operational
+    # endpoints below remain at the root path so health probes don't
+    # shift across builds.
     app.include_router(govern_router)
+    app.include_router(chat_router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, Any]:
