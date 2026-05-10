@@ -50,6 +50,7 @@ schemathesis = "^3.39.0"
 ruff = "^0.7.0"
 mypy = "^1.13.0"
 freezegun = "^1.5.1"
+testcontainers = {version = "^4.8.2", extras = ["redis"]}
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

@@ -22,10 +22,23 @@ Cache value: JSON object mirroring the PolicyDecision shape:
     }
 
 The wrapper is duck-typed against any object that exposes
-``async get(key) -> str | None`` and
+``async get(key) -> str | bytes | None`` and
 ``async setex(key, ttl_seconds, value: str)`` so we can swap in the
 ``redis.asyncio`` client in production and a lightweight in-memory fake
-in tests without conditional imports.
+in tests without conditional imports. ``get`` is permitted to return
+``bytes`` (as ``redis.asyncio.Redis`` does by default when
+``decode_responses=False``); the cache decodes UTF-8 itself rather than
+silently breaking on a misconfigured deployer.
+
+Production wiring (recommended):
+
+    import redis.asyncio as redis
+    redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    cache = CachedPolicyClient(opa_client, redis_client)
+
+Either ``decode_responses=True`` or ``decode_responses=False`` works --
+the cache handles both. The ``True`` setting is preferred because it
+lets logs and stats inspectors see strings directly.
 
 Public API:
   - ``CACHE_TTL_SECONDS``  the 5-second default
@@ -63,7 +76,7 @@ class RedisLike(Protocol):  # pragma: no cover
     or in the test stub.
     """
 
-    async def get(self, key: str) -> str | None: ...
+    async def get(self, key: str) -> str | bytes | None: ...
 
     async def setex(
         self, key: str, ttl_seconds: int, value: str
@@ -98,10 +111,33 @@ def _serialise_decision(decision: PolicyDecision) -> str:
     )
 
 
-def _deserialise_decision(payload: str) -> PolicyDecision:
-    """Reverse of `_serialise_decision`. Raises PolicyClientError on bad cache."""
+def _coerce_payload_to_str(payload: str | bytes) -> str:
+    """Accept the str-or-bytes return of redis.get; decode UTF-8 if bytes.
+
+    Falls through with ``PolicyClientError`` if the bytes aren't valid
+    UTF-8 -- this should never happen for our own writes (we always
+    write str-encoded JSON) but defends against a poisoned cache or a
+    cache key collision with another writer.
+    """
+    if isinstance(payload, bytes):
+        try:
+            return payload.decode("utf-8")
+        except UnicodeDecodeError as e:
+            raise PolicyClientError(
+                f"cache payload is not valid UTF-8: {e}"
+            ) from e
+    return payload
+
+
+def _deserialise_decision(payload: str | bytes) -> PolicyDecision:
+    """Reverse of `_serialise_decision`. Raises PolicyClientError on bad cache.
+
+    Accepts both ``str`` and ``bytes`` payloads to tolerate
+    ``redis.asyncio`` deployments where ``decode_responses=False``.
+    """
+    text = _coerce_payload_to_str(payload)
     try:
-        body = json.loads(payload)
+        body = json.loads(text)
     except json.JSONDecodeError as e:
         raise PolicyClientError(f"corrupt cache payload: {e}") from e
     if not isinstance(body, dict):

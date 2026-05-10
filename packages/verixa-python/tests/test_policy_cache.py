@@ -1,8 +1,8 @@
-"""pytest suite for verixa_runtime.policy.cache (CP-8.5).
+"""pytest suite for verixa_runtime.policy.cache (CP-8.5 + CP-8.6).
 
 Uses an in-memory RedisLike stub so the test suite never depends on a
-running Redis container. Live Redis integration runs under the
-``integration`` marker.
+running Redis container. Live Redis integration runs separately under
+the ``integration`` marker -- see test_policy_cache_integration.py.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from verixa_runtime.policy.cache import (
     CacheStats,
     _build_cache_key,
     _canonical_input_hash,
+    _coerce_payload_to_str,
     _deserialise_decision,
     _serialise_decision,
 )
@@ -40,7 +41,13 @@ from verixa_runtime.policy.client import (
 
 
 class InMemoryRedisStub:
-    """Satisfies the RedisLike Protocol: async get + setex."""
+    """Satisfies the RedisLike Protocol: async get + setex.
+
+    Returns ``str`` values (mirrors ``decode_responses=True`` default
+    Verixa wires for production). The bytes-tolerant code path is
+    exercised by ``InMemoryBytesRedisStub`` and the live integration
+    tests.
+    """
 
     def __init__(self) -> None:
         self.store: dict[str, str] = {}
@@ -58,6 +65,27 @@ class InMemoryRedisStub:
         self.setex_calls.append((key, ttl_seconds, value))
         self.store[key] = value
         self.ttls[key] = ttl_seconds
+
+
+class InMemoryBytesRedisStub:
+    """Mimics ``redis.asyncio.Redis(decode_responses=False)``.
+
+    ``get`` returns ``bytes``. The cache is required to UTF-8-decode
+    transparently so a deployer who forgets ``decode_responses=True``
+    doesn't get a silent crash.
+    """
+
+    def __init__(self) -> None:
+        self.store: dict[str, bytes] = {}
+
+    async def get(self, key: str) -> bytes | None:
+        return self.store.get(key)
+
+    async def setex(
+        self, key: str, ttl_seconds: int, value: str
+    ) -> None:
+        # redis.asyncio.setex accepts str OR bytes; production stores str.
+        self.store[key] = value.encode("utf-8")
 
 
 TENANT_A = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01")
@@ -227,6 +255,73 @@ def test_deserialise_rejects_non_object_raw() -> None:
         _deserialise_decision(
             json.dumps({"decision": "pass", "reason": "", "raw": [1, 2]})
         )
+
+
+# ---------------------------------------------------------------------------
+# CP-8.6: bytes-tolerance for redis.asyncio decode_responses=False deployers
+# ---------------------------------------------------------------------------
+
+
+def test_coerce_payload_passes_str_through() -> None:
+    assert _coerce_payload_to_str("hello") == "hello"
+
+
+def test_coerce_payload_decodes_utf8_bytes() -> None:
+    assert _coerce_payload_to_str(b"hello") == "hello"
+
+
+def test_coerce_payload_decodes_utf8_with_unicode() -> None:
+    assert _coerce_payload_to_str("héllo".encode("utf-8")) == "héllo"
+
+
+def test_coerce_payload_rejects_invalid_utf8() -> None:
+    with pytest.raises(PolicyClientError, match="not valid UTF-8"):
+        _coerce_payload_to_str(b"\xff\xfe\xfd invalid")
+
+
+def test_deserialise_accepts_bytes_payload() -> None:
+    """Real redis.asyncio with decode_responses=False returns bytes."""
+    d = PolicyDecision(
+        decision=PolicyDecisionKind.PASS, reason="ok", raw={}
+    )
+    payload_bytes = _serialise_decision(d).encode("utf-8")
+    out = _deserialise_decision(payload_bytes)
+    assert out.decision == PolicyDecisionKind.PASS
+    assert out.reason == "ok"
+
+
+def test_deserialise_bytes_corrupt_json_still_raises_correctly() -> None:
+    with pytest.raises(PolicyClientError, match="corrupt cache"):
+        _deserialise_decision(b"not even json")
+
+
+def test_deserialise_bytes_invalid_utf8_raises_utf8_error() -> None:
+    """Distinct error code path: bytes that aren't UTF-8 fail BEFORE JSON parse."""
+    with pytest.raises(PolicyClientError, match="not valid UTF-8"):
+        _deserialise_decision(b"\xff\xfe garbage")
+
+
+@pytest.mark.asyncio
+async def test_evaluate_handles_bytes_redis_get_return(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """End-to-end: a Redis client returning bytes (decode_responses=False)
+    must not crash the cache hit path."""
+    call_count: list[int] = []
+    opa = _build_opa_client_for_handler(
+        monkeypatch, _opa_pass_handler(call_count)
+    )
+    redis = InMemoryBytesRedisStub()
+    c = CachedPolicyClient(opa, redis)
+    input_doc = {"action": {"tool": "x"}}
+
+    # First call: miss -> OPA -> setex (writes str-encoded as bytes by stub)
+    await c.evaluate(TENANT_A, "verixa.fs.x", input_doc)
+    # Second call: hit -> get returns bytes -> deserialise must decode
+    decision = await c.evaluate(TENANT_A, "verixa.fs.x", input_doc)
+    assert decision.decision == PolicyDecisionKind.PASS
+    assert len(call_count) == 1  # one OPA call only
+    assert c.stats == CacheStats(hits=1, misses=1)
 
 
 # ---------------------------------------------------------------------------
