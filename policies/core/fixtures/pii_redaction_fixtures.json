@@ -1,0 +1,80 @@
+{
+  "policy": "verixa.core.pii_redaction",
+  "policy_file": "pii_redaction.rego",
+  "fixtures": [
+    {
+      "name": "clean_arguments_pass",
+      "expected_result": "pass",
+      "expected_reason": "",
+      "input": {
+        "agent_identity": {
+          "spiffe_id": "spiffe://example/agent/loan-officer-bot",
+          "role": "loan-officer",
+          "workflow_id": "11111111-1111-1111-1111-111111111111"
+        },
+        "action": {
+          "type": "tool_call",
+          "tool_name": "transfer_funds",
+          "arguments": {
+            "from_account": "ACC-12345",
+            "to_account": "ACC-67890",
+            "amount": 5000,
+            "currency": "GBP"
+          }
+        },
+        "context": {
+          "prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "model_version": "qwen3-72b@2025-12-01"
+        }
+      }
+    },
+    {
+      "name": "ssn_in_argument_fail",
+      "expected_result": "fail",
+      "expected_reason": "argument matched_arg contains an unredacted PII pattern: ssn",
+      "input": {
+        "agent_identity": {
+          "spiffe_id": "spiffe://example/agent/loan-officer-bot",
+          "role": "loan-officer",
+          "workflow_id": "11111111-1111-1111-1111-111111111111"
+        },
+        "action": {
+          "type": "tool_call",
+          "tool_name": "lookup_customer",
+          "arguments": {
+            "ssn": "123-45-6789",
+            "currency": "USD"
+          }
+        },
+        "context": {
+          "prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "model_version": "qwen3-72b@2025-12-01"
+        }
+      }
+    },
+    {
+      "name": "pan_in_memo_fail",
+      "expected_result": "fail",
+      "expected_reason": "argument matched_arg contains an unredacted PII pattern: pan",
+      "input": {
+        "agent_identity": {
+          "spiffe_id": "spiffe://example/agent/loan-officer-bot",
+          "role": "loan-officer",
+          "workflow_id": "11111111-1111-1111-1111-111111111111"
+        },
+        "action": {
+          "type": "tool_call",
+          "tool_name": "submit_payment",
+          "arguments": {
+            "memo": "card 4111-1111-1111-1111 charged",
+            "currency": "GBP"
+          }
+        },
+        "context": {
+          "prompt_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "model_version": "qwen3-72b@2025-12-01"
+        }
+      }
+    }
+  ]
+}

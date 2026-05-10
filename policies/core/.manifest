@@ -1,0 +1,11 @@
+{
+  "revision": "core-v1.0.0",
+  "roots": ["verixa/core"],
+  "metadata": {
+    "name": "verixa-core",
+    "description": "Core safety + governance policies (every-tenant default).",
+    "version": "1.0.0",
+    "compliance_pack": "core",
+    "regulatory_mappings": []
+  }
+}
