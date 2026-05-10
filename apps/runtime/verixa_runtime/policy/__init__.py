@@ -11,8 +11,8 @@ CP-8 sub-CPs:
   CP-8.1 -- bundle structure + 2 core policies
   CP-8.2 -- financial-services pack
   CP-8.3 -- Python OPA HTTP client
-  CP-8.4 -- bundle signing + signed-bundle verification (this commit)
-  CP-8.5 -- Redis 5s decision cache wrapper
+  CP-8.4 -- bundle signing + signed-bundle verification
+  CP-8.5 -- Redis 5s decision cache wrapper (this commit)
 """
 
 from verixa_runtime.policy.bundle import (  # noqa: F401
@@ -24,6 +24,13 @@ from verixa_runtime.policy.bundle import (  # noqa: F401
     discover_bundles,
     load_bundle,
     load_fixtures,
+)
+from verixa_runtime.policy.cache import (  # noqa: F401
+    CACHE_KEY_PREFIX,
+    CACHE_TTL_SECONDS,
+    CachedPolicyClient,
+    CacheStats,
+    RedisLike,
 )
 from verixa_runtime.policy.client import (  # noqa: F401
     OpaPolicyClient,
@@ -44,6 +51,10 @@ from verixa_runtime.policy.signing import (  # noqa: F401
 __all__ = [
     "BundleSignatures",
     "BundleSignaturesError",
+    "CACHE_KEY_PREFIX",
+    "CACHE_TTL_SECONDS",
+    "CacheStats",
+    "CachedPolicyClient",
     "OpaPolicyClient",
     "PolicyBundle",
     "PolicyBundleError",
@@ -53,6 +64,7 @@ __all__ = [
     "PolicyEntry",
     "PolicyFixture",
     "PolicyTestExpected",
+    "RedisLike",
     "SIGNATURES_FILENAME",
     "SIGNATURES_VERSION",
     "compute_bundle_file_hashes",
