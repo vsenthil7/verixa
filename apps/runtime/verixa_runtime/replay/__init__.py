@@ -57,6 +57,9 @@ from verixa_runtime.replay.snapshotter import (  # noqa: F401
     Snapshotter,
     TenantKeyResolver,
 )
+from verixa_runtime.replay.minio_store import (  # noqa: F401
+    MinioBundleStore,
+)
 
 
 __all__ = [
@@ -72,6 +75,7 @@ __all__ = [
     "EncryptedBundle",
     "InMemoryAuditIndex",
     "InMemoryBundleStore",
+    "MinioBundleStore",
     "PolicyEvaluationRecord",
     "Reconstructor",
     "ReplayBundle",
