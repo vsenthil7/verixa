@@ -58,6 +58,22 @@ def test_openapi_includes_control_plane_routes() -> None:
     assert "/v1/control/dossier/{dossier_id}" in paths
 
 
+def test_create_app_with_state_default_path() -> None:
+    """create_app_with_state(None) -- the default-state branch.
+
+    Exercises the ``if state is None: state = build_default_state()``
+    path. Confirms the resulting app responds on /healthz and has
+    the control-plane routes attached."""
+    app = create_app_with_state()  # no state -> default
+    client = TestClient(app)
+    assert client.get("/healthz").status_code == 200
+    # Empty workflow list confirms the wired-up state has an
+    # empty in-memory registry attached.
+    r = client.get("/v1/control/workflows")
+    assert r.status_code == 200
+    assert r.json()["total"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Workflow endpoints
 # ---------------------------------------------------------------------------
