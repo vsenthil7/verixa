@@ -43,7 +43,10 @@ from verixa_runtime.triad.reviewer import (
 )
 
 
-pytestmark = pytest.mark.asyncio
+# Note: pyproject.toml configures pytest-asyncio mode='auto' so async
+# def tests run automatically without an explicit marker. We do NOT
+# set a module-level pytestmark here -- doing so would mark every
+# (sync) helper test as asyncio and emit dozens of warnings.
 
 
 # ---------------------------------------------------------------------------
