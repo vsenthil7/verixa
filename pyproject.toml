@@ -97,6 +97,7 @@ addopts = [
     "--cov=verixa",
     "--cov=verixa_runtime",
     "--cov=verixa_control_plane",
+    "--cov=tools",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
     "--cov-branch",
@@ -111,6 +112,7 @@ pythonpath = [
     "packages/verixa-python",
     "apps/runtime",
     "apps/control-plane-api",
+    ".",
 ]
 
 [tool.coverage.run]
@@ -118,6 +120,7 @@ source = [
     "packages/verixa-python/verixa",
     "apps/runtime/verixa_runtime",
     "apps/control-plane-api/verixa_control_plane",
+    "tools",
 ]
 omit = ["*/tests/*", "*/_backup/*"]
 branch = true
