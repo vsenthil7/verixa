@@ -47,5 +47,6 @@ class Base(DeclarativeBase):
 # only for type checkers; Alembic resolves cross-schema FKs by name.
 from verixa_runtime.db import tenancy as _tenancy  # noqa: E402, F401
 from verixa_runtime.db import registry as _registry  # noqa: E402, F401
+from verixa_runtime.db import policy as _policy  # noqa: E402, F401
 
 __all__ = ["Base", "metadata"]
