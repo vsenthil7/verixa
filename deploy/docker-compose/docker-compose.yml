@@ -1,0 +1,188 @@
+# =============================================================================
+# Verixa — LOCAL DEV docker-compose (Windows / macOS / Linux developer machines)
+# =============================================================================
+# This compose file is for the **local developer machine only**. It brings up
+# the support services that Verixa Runtime Gateway + Control Plane API need
+# to talk to during development.
+#
+# Services in THIS compose:
+#   - Postgres 16 + pgvector (primary store: tenancy, registry, runtime, audit)
+#   - Redis 7 (Celery broker + cache layer for OPA evaluator)
+#   - OPA (Policy Engine; Rego evaluation sidecar)
+#   - Vault (HashiCorp; dev mode for tenant signing-key bootstrap)
+#   - MinIO (S3-compatible object store for Replay Vault snapshots)
+#   - Prometheus (metrics scrape stub for Runtime + Control Plane API)
+#
+# NOT in this compose (deliberate; these run elsewhere):
+#   - vLLM-on-ROCm + reviewer LLMs                  -> deploy/amd-droplet/
+#     (runs on AMD MI300X via vllm/vllm-openai-rocm:latest with device
+#     mappings /dev/kfd, /dev/dri, --group-add=video, --ipc=host;
+#     see CP-18 and AMD_test/verixa-build-testing-memory.md)
+#   - SPIFFE/SPIRE                                 -> Phase 1 (dev: bypassed)
+#   - Helm prod deployment                         -> Phase 1
+#
+# Architecture note: Verixa Runtime calls the remote MI300X vLLM endpoint
+# from the local stack. Local Docker = support services. Remote Docker =
+# inference container. They are independent compose contexts.
+#
+# Usage:
+#   ops.ps1 up        -> docker compose up -d
+#   ops.ps1 down      -> docker compose down
+#   ops.ps1 health    -> hits every healthcheck endpoint
+# =============================================================================
+
+name: verixa-dev
+
+services:
+  # ---------------------------------------------------------------------------
+  # Postgres 16 with pgvector (primary store)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: verixa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: verixa
+      POSTGRES_PASSWORD: verixa_dev_password
+      POSTGRES_DB: verixa
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verixa -d verixa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - verixa-net
+
+  # ---------------------------------------------------------------------------
+  # Redis 7 (Celery broker + OPA-evaluator cache)
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: verixa-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - verixa-net
+
+  # ---------------------------------------------------------------------------
+  # OPA (Policy Engine sidecar; Rego evaluation)
+  # ---------------------------------------------------------------------------
+  opa:
+    image: openpolicyagent/opa:0.70.0-rootless
+    container_name: verixa-opa
+    restart: unless-stopped
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "--log-level=info"
+      - "--log-format=json"
+      - "/policies"
+    ports:
+      - "8181:8181"
+    volumes:
+      - ../../policies:/policies:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8181/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - verixa-net
+
+  # ---------------------------------------------------------------------------
+  # Vault (HashiCorp; dev mode — for hackathon only, NEVER in production)
+  # ---------------------------------------------------------------------------
+  vault:
+    image: hashicorp/vault:1.18
+    container_name: verixa-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: verixa-dev-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://0.0.0.0:8200
+    ports:
+      - "8200:8200"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:8200/v1/sys/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - verixa-net
+
+  # ---------------------------------------------------------------------------
+  # MinIO (S3-compatible object store; Replay Vault snapshots)
+  # ---------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-12-13T22-19-12Z
+    container_name: verixa-minio
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: verixa
+      MINIO_ROOT_PASSWORD: verixa_dev_password
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - verixa-net
+
+  # ---------------------------------------------------------------------------
+  # Prometheus (metrics scrape stub)
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: verixa-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=24h"
+      - "--web.enable-lifecycle"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - verixa-net
+
+# ---------------------------------------------------------------------------
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+  prometheus-data:
+
+networks:
+  verixa-net:
+    driver: bridge
