@@ -1,0 +1,29 @@
+{
+  "name": "verixa-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verixa — enterprise AI runtime control plane and trust platform (Phase 0 hackathon prototype on AMD MI300X)",
+  "license": "MIT",
+  "author": "v_sen <v_sen@verixa.dev>",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "test:coverage": "turbo run test:coverage",
+    "typecheck": "turbo run typecheck",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.2",
+    "@types/node": "^22.10.0",
+    "vitest": "^2.1.8",
+    "@vitest/coverage-v8": "^2.1.8"
+  }
+}
