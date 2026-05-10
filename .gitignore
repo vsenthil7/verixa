@@ -1,0 +1,137 @@
+# =============================================================================
+# Verixa — .gitignore
+# Adapted from Auditex (Hack0014) baseline; extended for Next.js/Turborepo,
+# Poetry, ROCm, MinIO, Vault, OPA, and HF Spaces deployment.
+# =============================================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.eggs/
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.hypothesis/
+.python-version
+
+# --- Poetry ---
+poetry.lock.bak
+
+# --- Node / Turborepo / Next.js ---
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.turbo/
+.next/
+out/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# --- Frontend artefacts ---
+apps/control-plane-ui/.next/
+apps/control-plane-ui/out/
+packages/verixa-ts/dist/
+
+# --- Tests / Playwright / Vitest ---
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+*.lcov
+
+# --- Env files (keep .env.example tracked) ---
+.env
+.env.*
+!.env.example
+
+# --- Crypto / secrets (NEVER commit) ---
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+secrets/
+.vault-token
+
+# --- OPA / Rego compiled bundles (rebuilt from policies/) ---
+policies/_dist/
+*.bundle.tar.gz
+
+# --- Database / migrations local artefacts ---
+*.db
+*.sqlite
+*.sqlite3
+alembic.ini.local
+
+# --- Docker / Compose overrides ---
+docker-compose.override.yml
+.docker/
+
+# --- Object store local data (MinIO dev) ---
+.minio-data/
+
+# --- Logs ---
+*.log
+logs/
+**/src/logs/
+
+# --- IDE / editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Patches / temp ---
+*.tmp
+_patch.tmp
+*.bak
+
+# --- HF Spaces local cache ---
+.huggingface/
+.cache/
+
+# --- ROCm / vLLM cache (when running locally) ---
+.rocm-cache/
+.vllm-cache/
+
+# --- Demo videos (large binaries) ---
+demo/*.webm
+demo/*.mp4
+demovideo/results/**/*.webm
+demovideo/results/**/*.mp4
+
+# --- Generated dossiers (regenerated; .gitkeep preserves structure) ---
+dossiers/output/
+!dossiers/output/.gitkeep
+
+# --- Replay-vault local snapshots ---
+.replay-cache/
+
+# --- Telemetry / Prometheus local TSDB ---
+.prometheus-data/
+.grafana-data/
