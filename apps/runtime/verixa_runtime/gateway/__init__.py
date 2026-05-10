@@ -12,12 +12,12 @@ CP-6 sub-CPs:
   CP-6.1 — envelope models
   CP-6.2 — /v1/runtime/govern endpoint (Phase-0 stub pipeline)
   CP-6.3 — /v1/chat/completions OpenAI-compat proxy
-  CP-6.4 — API-key auth + structured logging middleware (this commit)
+  CP-6.4 — API-key auth + structured logging middleware
 
-The full pipeline (policy -> risk -> triad -> emit-audit) lands across
-CP-8/9/10. CP-6 wires the envelope shapes and the call points so the
-endpoints are reachable end-to-end, with a simple deterministic stub
-decision in CP-6.2 that becomes the real decision router in CP-9.
+CP-9.2 — endpoint dispatch swapped from ``decide_phase0`` (CP-6.2 stub,
+retained for backward-compat) to ``decide_via_router`` (firewall +
+CP-9.1 decision router). OPA + audit-emit + triad still pending
+(CP-10, CP-12).
 """
 
 from verixa_runtime.gateway.auth import (  # noqa: F401
@@ -42,6 +42,7 @@ from verixa_runtime.gateway.envelopes import (  # noqa: F401
 )
 from verixa_runtime.gateway.govern import (  # noqa: F401
     decide_phase0,
+    decide_via_router,
     router as govern_router,
 )
 from verixa_runtime.gateway.logging import (  # noqa: F401
@@ -70,6 +71,7 @@ __all__ = [
     "TRACE_ID_HEADER",
     "chat_router",
     "decide_phase0",
+    "decide_via_router",
     "govern_router",
     "parse_api_key_env",
 ]

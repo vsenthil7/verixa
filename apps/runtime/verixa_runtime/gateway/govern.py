@@ -1,34 +1,37 @@
-"""POST /v1/runtime/govern — primary governed-action endpoint.
+"""POST /v1/runtime/govern -- primary governed-action endpoint.
 
-Phase 0 stub pipeline:
+CP-6.2 wired a deterministic stub (`decide_phase0`). CP-9.2 wires the
+real risk + decision router (`decide_via_router`) alongside it; the
+endpoint now dispatches via the router. `decide_phase0` is retained
+unchanged so its CP-6.2 unit tests still pass (it is no longer reached
+from the HTTP surface but stays exported for backward-compat).
 
-  1. Pydantic validates the request envelope (CP-6.1).
-  2. A deterministic stub decision function returns allow/deny/escalate
-     based on simple rules over the request (full risk + policy + triad
-     in CP-8/9/10).
-  3. The endpoint allocates a fresh audit_id (UUID4) and returns the
-     response.
+Phase-0 deliberately still does NOT, even via the router:
 
-The stub decision function is exposed as `decide_phase0` so CP-9 can
-keep it as a fallback while wiring the real decision router.
-
-Phase 0 deliberately does NOT yet:
-  - Persist to the audit ledger (CP-12 wires DB + emit + persist)
+  - Invoke OPA (CP-12 wires CachedPolicyClient at the gateway -- this
+    commit passes ``policy_decisions=()`` so R3 abstain / R2 fail are
+    only reachable via unit tests that inject decisions directly)
+  - Persist to the audit ledger (CP-12)
   - Invoke triad review (CP-10)
-  - Invoke OPA (CP-8)
-  - Score risk (CP-9)
 
-These all add additional inputs to `decide_phase0` and additional fields
-to the response envelope without breaking the on-the-wire shape.
+The router itself supports all of the above; CP-9.2 just hasn't bolted
+the I/O collaborators in. The on-the-wire envelope shapes (CP-6.1)
+remain stable.
 """
 
 from __future__ import annotations
 
 import time
 import uuid
+from typing import Iterable
 
 from fastapi import APIRouter
 
+from verixa_runtime.firewall.allowlist import (
+    ToolRegistryEntry,
+    evaluate_allowlist,
+)
+from verixa_runtime.firewall.arg_bounds import evaluate_argument_bounds
 from verixa_runtime.gateway.envelopes import (
     Decision,
     GovernRequest,
@@ -37,30 +40,27 @@ from verixa_runtime.gateway.envelopes import (
     PolicyResult,
     RiskClassification,
 )
+from verixa_runtime.policy.client import PolicyDecision
+from verixa_runtime.risk.router import RouterInputs, route_decision
 
 
 router = APIRouter(prefix="/v1/runtime", tags=["runtime"])
 
 
-# Threshold constants — placeholder values; CP-9 risk engine produces
-# real scores from a real model. Phase 0 returns a deterministic stub
-# based on action-type + tool-name only, so integration partners can
-# wire the call site end-to-end without waiting for the full pipeline.
+# ---------------------------------------------------------------------------
+# Legacy CP-6.2 stub (retained for backward-compat; tests still pin it)
+# ---------------------------------------------------------------------------
+
 _DENY_TOOLS = frozenset({"shutdown_production", "delete_all_users"})
 _ESCALATE_TOOLS = frozenset({"transfer_funds", "send_external_email"})
 
 
 def decide_phase0(req: GovernRequest) -> GovernResponse:
-    """Deterministic Phase 0 stub decision.
+    """Deterministic Phase-0 stub decision (CP-6.2; retained).
 
-    Decision rules:
-      - tool_name in deny-list           → deny  (risk 0.95, critical)
-      - tool_name in escalate-list       → escalate (risk 0.65, high,
-                                            triad_invoked=true)
-      - everything else                  → allow  (risk 0.10, low)
-
-    These thresholds are placeholder; CP-9 replaces this whole function
-    with the real risk + decision router.
+    No longer reached from /v1/runtime/govern after CP-9.2; kept so the
+    nine CP-6.2 unit tests continue to pass and so callers that imported
+    it directly aren't broken.
     """
     audit_id = uuid.uuid4()
     started = time.monotonic()
@@ -124,11 +124,73 @@ def decide_phase0(req: GovernRequest) -> GovernResponse:
     )
 
 
+# ---------------------------------------------------------------------------
+# CP-9.2 -- real decision-router dispatch path
+# ---------------------------------------------------------------------------
+
+
+# Phase-0 hardcoded tool registry. Mirrors the seven tools the sample
+# workflows use (CP-16 will replace this with a verixa_registry.tools
+# database read once Alembic seeds the rows). All entries are active
+# and unrestricted by workflow_id, so the allow-list only weeds out
+# tools that aren't in the seven names listed here.
+_PHASE0_TOOL_REGISTRY: tuple[ToolRegistryEntry, ...] = (
+    ToolRegistryEntry(name="read_account_balance", is_active=True),
+    ToolRegistryEntry(name="lookup_account", is_active=True),
+    ToolRegistryEntry(name="lookup_customer", is_active=True),
+    ToolRegistryEntry(name="read_user_profile", is_active=True),
+    ToolRegistryEntry(name="transfer_funds", is_active=True),
+    ToolRegistryEntry(name="send_external_email", is_active=True),
+    ToolRegistryEntry(name="submit_payment", is_active=True),
+)
+
+
+def decide_via_router(
+    req: GovernRequest,
+    *,
+    registry: list[ToolRegistryEntry] | None = None,
+    policy_decisions: Iterable[tuple[str, PolicyDecision]] = (),
+) -> GovernResponse:
+    """Wire CP-7 firewall + CP-9.1 router into a single decision.
+
+    Steps:
+      1. Resolve registry -> default Phase-0 hardcoded list of 7 tools.
+      2. Run firewall.evaluate_allowlist with the request's workflow_id.
+      3. Run firewall.evaluate_argument_bounds with schema=None (the
+         Phase-0 registry doesn't carry per-tool schemas yet; the
+         arg_bounds layer treats schema=None as "skip" and returns
+         ALLOW). CP-12 will surface the schema from the DB.
+      4. Build RouterInputs with caller-supplied policy_decisions
+         (empty by default; CP-12 wires CachedPolicyClient).
+      5. Dispatch to risk.router.route_decision.
+
+    Keyword-only ``registry`` and ``policy_decisions`` keep the call site
+    clean and enable test injection without HTTP/OPA.
+    """
+    reg = list(registry) if registry is not None else list(_PHASE0_TOOL_REGISTRY)
+    allowlist_verdict = evaluate_allowlist(
+        req.action,
+        req.agent_identity.workflow_id,
+        reg,
+    )
+    arg_bounds_verdict = evaluate_argument_bounds(req.action, schema=None)
+    inputs = RouterInputs(
+        request=req,
+        allowlist_verdict=allowlist_verdict,
+        arg_bounds_verdict=arg_bounds_verdict,
+        policy_decisions=tuple(policy_decisions),
+    )
+    return route_decision(inputs)
+
+
 @router.post("/govern", response_model=GovernResponse)
 def govern(req: GovernRequest) -> GovernResponse:
     """Govern a candidate action.
 
-    Phase 0 returns a deterministic stub decision; CP-8/9/10 wire the
-    real policy engine, risk engine, and triad-review pipeline.
+    CP-9.2: dispatches via ``decide_via_router`` (firewall + risk
+    router). Until CP-12 wires real OPA, ``policy_decisions`` is empty,
+    so only firewall outcomes can flip ALLOW to DENY at the HTTP level.
+    Direct callers of ``decide_via_router`` (tests, CP-12) can inject
+    policy decisions to exercise R2/R3 paths.
     """
-    return decide_phase0(req)
+    return decide_via_router(req)

@@ -1,11 +1,18 @@
-"""pytest suite for verixa_runtime.gateway.govern (CP-6.2 + CP-6.4 auth).
+"""pytest suite for verixa_runtime.gateway.govern (CP-6.2 + CP-6.4 + CP-9.2).
 
-Tests both the pure decision function `decide_phase0` and the wired
-endpoint via FastAPI TestClient. 100% line + branch coverage on
-gateway/govern.py and gateway/__init__.py.
+Three layers:
 
-CP-6.4 added API-key middleware; tests inject a known key via
-`create_app(api_keys=...)` and pass the `X-Verixa-API-Key` header.
+  1. Pure ``decide_phase0`` -- 9 unit tests pinning the legacy CP-6.2
+     stub. CP-9.2 retains the function unchanged so these still pass.
+  2. Pure ``decide_via_router`` -- CP-9.2 unit test that injects an
+     ABSTAIN policy decision to prove R3 (escalate) is reachable
+     without HTTP/OPA wiring (CP-12 supplies real OPA).
+  3. Endpoint via FastAPI TestClient -- CP-9.2 dispatches via
+     ``decide_via_router``. Registered tools (read_account_balance,
+     transfer_funds, ...) return ALLOW; unregistered tools (e.g.
+     shutdown_production) deny via firewall.tool_not_registered.
+
+100% line + branch coverage on gateway/govern.py and gateway/__init__.py.
 """
 
 from __future__ import annotations
@@ -25,7 +32,9 @@ from verixa_runtime.gateway import (
     PolicyResult,
     RiskClassification,
     decide_phase0,
+    decide_via_router,
 )
+from verixa_runtime.policy.client import PolicyDecision, PolicyDecisionKind
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +100,7 @@ def _request_payload_for_tool(tool_name: str | None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# decide_phase0 — pure function
+# decide_phase0 -- pure function (CP-6.2 legacy stub, retained unchanged)
 # ---------------------------------------------------------------------------
 
 
@@ -167,7 +176,7 @@ def test_decide_phase0_latency_is_non_negative() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Endpoint wiring — POST /v1/runtime/govern
+# Endpoint wiring -- POST /v1/runtime/govern (CP-9.2 dispatches via router)
 # ---------------------------------------------------------------------------
 
 
@@ -186,24 +195,62 @@ def test_endpoint_returns_200_for_valid_request(
 def test_endpoint_deny_for_deny_list_tool(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
+    """CP-9.2: unregistered tools deny via firewall.tool_not_registered.
+
+    Previously (CP-6.2 stub) this denied with hard_policy_breach +
+    phase0.stub.deny_list; the router now surfaces the stable firewall
+    error code instead.
+    """
     payload = _request_payload_for_tool("shutdown_production")
     r = client.post("/v1/runtime/govern", json=payload, headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["decision"] == "deny"
-    assert body["reason"] == "hard_policy_breach"
+    assert body["reason"] == "firewall_denied"
+    assert body["policy_id"] == "firewall.tool_not_registered"
 
 
-def test_endpoint_escalate_for_escalate_list_tool(
+def test_endpoint_registered_tool_no_policies_returns_allow(
     client: TestClient, auth_headers: dict[str, str]
 ) -> None:
+    """CP-9.2: registered tools with no policy_decisions ALLOW.
+
+    transfer_funds used to escalate under the CP-6.2 stub (escalate-list
+    membership) but is now a registered tool that passes the firewall
+    cleanly; with empty policy_decisions the router returns ALLOW. Real
+    escalation needs OPA ABSTAIN -- exercised in the unit test below.
+    """
     payload = _request_payload_for_tool("transfer_funds")
     r = client.post("/v1/runtime/govern", json=payload, headers=auth_headers)
     assert r.status_code == 200
     body = r.json()
-    assert body["decision"] == "escalate"
-    assert body["triad_invoked"] is True
-    assert body["escalation_id"] is not None
+    assert body["decision"] == "allow"
+    assert body["triad_invoked"] is False
+
+
+def test_endpoint_escalate_via_injected_abstain() -> None:
+    """CP-9.2: ESCALATE path is reachable when an ABSTAIN is injected.
+
+    The HTTP endpoint can't inject policy_decisions in Phase 0 (CP-12
+    will wire CachedPolicyClient), so this test calls decide_via_router
+    directly -- proving the wiring is correct and the router's R3 path
+    fires when OPA returns abstain on a registered tool.
+    """
+    req = _request_for_tool("transfer_funds")
+    decisions = (
+        (
+            "verixa.x.unknown",
+            PolicyDecision(
+                decision=PolicyDecisionKind.ABSTAIN,
+                reason="undefined",
+            ),
+        ),
+    )
+    resp = decide_via_router(req, policy_decisions=decisions)
+    assert resp.decision == Decision.ESCALATE
+    assert resp.triad_invoked is True
+    assert resp.escalation_id is not None
+    assert resp.policy_id == "verixa.x.unknown"
 
 
 def test_endpoint_returns_422_for_missing_required_field(
