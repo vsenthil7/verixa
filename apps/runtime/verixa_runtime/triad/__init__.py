@@ -6,15 +6,19 @@ protocol that prevents reviewer collusion, post-hoc verdict tampering,
 and "first-look bias" where a slow reviewer copies a fast one.
 
 CP-10 sub-CPs:
-  CP-10.1 -- pure protocol primitives (this commit): commit/reveal
-              records, consensus algorithm, fixture types. No I/O.
-  CP-10.2 -- reviewer client abstraction (OpenAI-compat HTTP wrapper).
+  CP-10.1 -- pure protocol primitives: commit/reveal records,
+              consensus algorithm, fixture types. No I/O.
+  CP-10.2 -- reviewer client abstraction (this commit): Reviewer
+              Protocol type, OpenAICompatReviewer (async HTTP client
+              for vLLM-on-ROCm /v1/chat/completions or any
+              OpenAI-compatible surface), MockReviewer (deterministic
+              for tests + offline demo), ReviewerError.
   CP-10.3 -- triad orchestrator: parallel invoke + commit/reveal driver.
   CP-10.4 -- live MI300X integration test (gated by droplet up-check).
   CP-10.5 -- gateway integration: wire into R3-escalate path.
 
 Protocol summary (full design in docs/04_security_and_audit
-/SECURITY_AND_AUDIT.md A4 §6):
+/SECURITY_AND_AUDIT.md A4 Section 6):
 
   Phase 1 (commit):
     - Each reviewer R_i computes verdict V_i and a fresh 256-bit
@@ -61,12 +65,24 @@ from verixa_runtime.triad.protocol import (  # noqa: F401
     generate_nonce,
     verify_reveal,
 )
+from verixa_runtime.triad.reviewer import (  # noqa: F401
+    MockReviewer,
+    OpenAICompatReviewer,
+    Reviewer,
+    ReviewerConfig,
+    ReviewerError,
+)
 
 
 __all__ = [
     "Commitment",
     "ConsensusKind",
     "ConsensusOutcome",
+    "MockReviewer",
+    "OpenAICompatReviewer",
+    "Reviewer",
+    "ReviewerConfig",
+    "ReviewerError",
     "ReviewerId",
     "ReviewerVerdict",
     "VerdictDecision",
