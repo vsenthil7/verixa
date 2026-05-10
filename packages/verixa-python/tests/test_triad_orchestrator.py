@@ -305,8 +305,12 @@ async def test_run_reviewer_a_outage_synthesises_escalate() -> None:
     assert outcome.verdicts[0].decision == VerdictDecision.ESCALATE
     assert outcome.verdicts[0].confidence == pytest.approx(0.0)
     assert ReviewerId.REVIEWER_A in outcome.failed_reviewers
-    # B and C voted ALLOW; A synthesised ESCALATE; consensus = SPLIT.
-    assert outcome.consensus.kind == ConsensusKind.SPLIT
+    # B and C voted ALLOW; A synthesised ESCALATE -> 2 distinct
+    # decisions across the three slots -> MAJORITY ALLOW with A as
+    # the dissenter.
+    assert outcome.consensus.kind == ConsensusKind.MAJORITY
+    assert outcome.consensus.agreed_decision == VerdictDecision.ALLOW
+    assert outcome.consensus.dissenters == (ReviewerId.REVIEWER_A,)
 
 
 async def test_run_audit_emit_called_with_three_commitments() -> None:
