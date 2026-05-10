@@ -26,6 +26,14 @@ Design rules (carried from docs/06_data_model + docs/07_threat_model):
    invariant pattern carried into compliance_language.ts).
 """
 
+from verixa_runtime.crypto.aes_gcm import (  # noqa: F401
+    AesGcmCiphertext,
+    AesGcmDecryptionError,
+    AesGcmKey,
+    decrypt,
+    encrypt,
+    generate_key,
+)
 from verixa_runtime.crypto.ed25519 import (  # noqa: F401
     Ed25519KeyPair,
     Ed25519SignatureError,
@@ -42,12 +50,18 @@ from verixa_runtime.crypto.hash_chain import (  # noqa: F401
 )
 
 __all__ = [
+    "AesGcmCiphertext",
+    "AesGcmDecryptionError",
+    "AesGcmKey",
     "Ed25519KeyPair",
     "Ed25519SignatureError",
     "HashChainBrokenError",
     "HashChainEntry",
     "compute_genesis_prev",
     "compute_self_hash",
+    "decrypt",
+    "encrypt",
+    "generate_key",
     "generate_keypair",
     "sign",
     "verify",
