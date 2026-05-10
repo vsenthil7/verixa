@@ -51,5 +51,6 @@ from verixa_runtime.db import policy as _policy  # noqa: E402, F401
 from verixa_runtime.db import audit as _audit  # noqa: E402, F401
 from verixa_runtime.db import replay as _replay  # noqa: E402, F401
 from verixa_runtime.db import review as _review  # noqa: E402, F401
+from verixa_runtime.db import dossier as _dossier  # noqa: E402, F401
 
 __all__ = ["Base", "metadata"]
