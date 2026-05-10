@@ -21,6 +21,8 @@ remain stable.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import time
 import uuid
 from typing import Iterable
@@ -41,6 +43,10 @@ from verixa_runtime.gateway.envelopes import (
     RiskClassification,
 )
 from verixa_runtime.policy.client import PolicyDecision
+from verixa_runtime.replay.snapshotter import (
+    SnapshotInputs,
+    Snapshotter,
+)
 from verixa_runtime.risk.router import RouterInputs, route_decision
 from verixa_runtime.triad.orchestrator import (
     TriadOrchestrator,
@@ -294,3 +300,120 @@ def _summarise_request_for_triad(req: GovernRequest) -> str:
         f"role={req.agent_identity.role} "
         f"workflow_id={req.agent_identity.workflow_id}"
     )
+
+
+# ---------------------------------------------------------------------------
+# CP-12.5 -- snapshot every governed action (fire-and-forget)
+# ---------------------------------------------------------------------------
+
+
+_REPLAY_LOG = logging.getLogger("verixa.gateway.replay")
+
+
+def _snapshot_inputs_from(
+    req: GovernRequest,
+    resp: GovernResponse,
+    tenant_id: uuid.UUID,
+) -> SnapshotInputs:
+    """Translate the live request/response into snapshot inputs.
+
+    Phase-0: captures the request envelope as a dict + the decision
+    fields from the response. CP-12.5 doesn't yet thread retrieved
+    documents or tool I/O through the gateway -- those arrive when
+    the Evidence Validator and Tool Call surface get full wiring.
+    """
+    return SnapshotInputs(
+        audit_id=resp.audit_id,
+        tenant_id=tenant_id,
+        decision=resp.decision.value,
+        risk_score=resp.risk_score,
+        request_envelope=req.model_dump(mode="json"),
+    )
+
+
+async def _snapshot_in_background(
+    snapshotter: Snapshotter,
+    req: GovernRequest,
+    resp: GovernResponse,
+    tenant_id: uuid.UUID,
+) -> None:
+    """Best-effort background snapshot. Logs on failure but never
+    raises into the caller's context -- the decision has already
+    been made and returned; the snapshot is a durability concern.
+    """
+    try:
+        await snapshotter.snapshot(
+            _snapshot_inputs_from(req, resp, tenant_id)
+        )
+    except Exception as exc:  # noqa: BLE001 -- intentional catch-all
+        _REPLAY_LOG.error(
+            "snapshot failed for audit_id=%s tenant_id=%s: %r",
+            resp.audit_id, tenant_id, exc,
+        )
+
+
+async def decide_via_router_with_replay(
+    req: GovernRequest,
+    *,
+    tenant_id: uuid.UUID,
+    snapshotter: Snapshotter,
+    triad: TriadOrchestrator | None = None,
+    registry: list[ToolRegistryEntry] | None = None,
+    policy_decisions: Iterable[tuple[str, PolicyDecision]] = (),
+) -> GovernResponse:
+    """Full hot-path: router (+ optional triad on escalate) + snapshot.
+
+    Workflow:
+      1. If ``triad`` is supplied, run ``decide_via_router_with_triad``;
+         otherwise run sync ``decide_via_router``. The result is the
+         GovernResponse the gateway will return.
+      2. Fire-and-forget a snapshot via asyncio.create_task so the
+         snapshot's I/O latency doesn't sit on the gateway's hot
+         path. Snapshot failures are logged, not raised.
+      3. Return the response.
+
+    Tests can await the background task by capturing it through the
+    ``_pending_snapshots`` registry; production simply lets the
+    asyncio loop run them to completion before shutdown.
+
+    The tenant_id is a kwarg (not derived from the request) because
+    Phase-0 auth resolves it from the API key in the middleware
+    layer (CP-6.4); the value flows in here from the endpoint
+    function rather than being inferred from the agent_identity
+    field (which is the agent's identity, not the tenant's).
+    """
+    if triad is not None:
+        resp = await decide_via_router_with_triad(
+            req,
+            triad=triad,
+            registry=registry,
+            policy_decisions=policy_decisions,
+        )
+    else:
+        resp = decide_via_router(
+            req, registry=registry, policy_decisions=policy_decisions
+        )
+    # Fire-and-forget the snapshot. The task is stashed so tests +
+    # graceful-shutdown handlers can await pending writes.
+    task = asyncio.create_task(
+        _snapshot_in_background(snapshotter, req, resp, tenant_id)
+    )
+    _pending_snapshots.add(task)
+    task.add_done_callback(_pending_snapshots.discard)
+    return resp
+
+
+# Module-level registry of in-flight snapshot tasks. Tests use this
+# to await background work; the FastAPI app's shutdown hook awaits
+# remaining tasks so no snapshot is dropped on container restart.
+_pending_snapshots: set[asyncio.Task[None]] = set()
+
+
+def pending_snapshot_tasks() -> frozenset[asyncio.Task[None]]:
+    """Snapshot of currently in-flight background snapshot tasks.
+
+    Returned as a frozenset so callers can iterate without seeing
+    concurrent modifications. Useful for tests that want to await
+    completion and for shutdown handlers.
+    """
+    return frozenset(_pending_snapshots)
