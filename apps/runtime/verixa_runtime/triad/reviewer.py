@@ -120,11 +120,16 @@ class Reviewer(Protocol):
     """Reviewer surface used by the orchestrator (CP-10.3)."""
 
     @property
-    def reviewer_id(self) -> ReviewerId: ...
+    def reviewer_id(self) -> ReviewerId:  # pragma: no cover
+        # Protocol method body is unreachable -- structural typing
+        # only; concrete classes provide the real implementation.
+        ...
 
     async def review(
         self, *, audit_id: uuid.UUID, governed_action_summary: str
-    ) -> ReviewerVerdict: ...
+    ) -> ReviewerVerdict:  # pragma: no cover
+        # Protocol method body is unreachable; see above.
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -207,11 +212,10 @@ def _parse_chat_completion_text(content: str) -> dict[str, Any]:
     """
     s = content.strip()
     if s.startswith("```"):
-        # Strip optional language tag + closing fence.
+        # Strip optional language tag (first line after the opening
+        # fence) and any trailing backtick run.
         s = s.split("\n", 1)[1] if "\n" in s else s
         s = s.rstrip("`").rstrip()
-        if s.endswith("```"):
-            s = s[: -3].rstrip()
     try:
         parsed = json.loads(s)
     except json.JSONDecodeError as e:
