@@ -1,0 +1,58 @@
+# Verixa Triad Review Engine — reviewer endpoint configuration
+#
+# Copy to `config/reviewers.yaml` and fill in actual endpoints.
+# `reviewers.yaml` is gitignored; only this `.example` file is tracked.
+#
+# Phase 0 reference deployment: AMD Developer Cloud MI300X droplet running
+# vllm/vllm-openai-rocm:latest, OpenAI-compatible inference endpoint.
+# See AMD_test/verixa-build-testing-memory.md for the validated stack.
+
+triad:
+  # Reviewer A — Qwen family (target: Qwen3-72B in production)
+  - reviewer_id: "A"
+    model_name: "Qwen/Qwen3-0.6B"   # hackathon: small model on the validated droplet
+    endpoint_url: "http://165.245.133.120:8000/v1"
+    backend: "vllm-rocm"
+    api_key: null                    # vLLM-on-ROCm dev mode: no auth
+    timeout_seconds: 30
+    sampling:
+      temperature: 0.0               # deterministic for hash-commit-and-reveal
+      top_p: 1.0
+      max_tokens: 512
+      seed: 1                        # deterministic per-reviewer seed
+
+  # Reviewer B — Llama family (target: Llama-3.3-70B in production)
+  - reviewer_id: "B"
+    model_name: "Qwen/Qwen3-0.6B"   # hackathon fallback: same droplet, different sampling
+    endpoint_url: "http://165.245.133.120:8000/v1"
+    backend: "vllm-rocm"
+    api_key: null
+    timeout_seconds: 30
+    sampling:
+      temperature: 0.0
+      top_p: 1.0
+      max_tokens: 512
+      seed: 2
+
+  # Reviewer C — DeepSeek family (target: DeepSeek-V3 in production)
+  - reviewer_id: "C"
+    model_name: "Qwen/Qwen3-0.6B"   # hackathon fallback
+    endpoint_url: "http://165.245.133.120:8000/v1"
+    backend: "vllm-rocm"
+    api_key: null
+    timeout_seconds: 30
+    sampling:
+      temperature: 0.0
+      top_p: 1.0
+      max_tokens: 512
+      seed: 3
+
+# When MI300X capacity allows the full triad, edit per reviewer:
+#   model_name: "Qwen/Qwen3-72B"     (Reviewer A)
+#   model_name: "meta-llama/Llama-3.3-70B-Instruct"  (Reviewer B)
+#   model_name: "deepseek-ai/DeepSeek-V3"            (Reviewer C)
+# and point endpoint_url at the per-model serving endpoints.
+
+# HF Inference Endpoints fallback (set backend: "hf-inference"):
+#   endpoint_url: "https://api-inference.huggingface.co/models/<model>"
+#   api_key: "${HF_TOKEN}"   # loaded from environment at runtime

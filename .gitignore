@@ -66,6 +66,10 @@ coverage/
 .env.*
 !.env.example
 
+# --- Live runtime configs (keep .example tracked) ---
+config/reviewers.yaml
+!config/reviewers.yaml.example
+
 # --- Crypto / secrets (NEVER commit) ---
 *.pem
 *.key
@@ -135,3 +139,7 @@ dossiers/output/
 # --- Telemetry / Prometheus local TSDB ---
 .prometheus-data/
 .grafana-data/
+# --- Local file backups (Auditex BLD-013; root + apps/ + packages/; docs/_backup stays as audit trail) ---
+/_backup/
+apps/**/_backup/
+packages/**/_backup/

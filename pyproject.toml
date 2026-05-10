@@ -1,0 +1,123 @@
+[tool.poetry]
+name = "verixa-monorepo"
+version = "0.1.0"
+description = "Verixa — enterprise AI runtime control plane and trust platform (Phase 0 hackathon prototype on AMD MI300X)"
+authors = ["v_sen <v_sen@verixa.dev>"]
+license = "MIT"
+readme = "README.md"
+packages = [
+    { include = "verixa", from = "packages/verixa-python" },
+    { include = "verixa_runtime", from = "apps/runtime" },
+    { include = "verixa_control_plane", from = "apps/control-plane-api" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+# Web + API
+fastapi = "^0.115.0"
+uvicorn = { extras = ["standard"], version = "^0.32.0" }
+pydantic = "^2.9.0"
+pydantic-settings = "^2.6.0"
+# DB
+sqlalchemy = { extras = ["asyncio"], version = "^2.0.36" }
+asyncpg = "^0.30.0"
+alembic = "^1.14.0"
+# Crypto
+cryptography = "^43.0.3"
+pynacl = "^1.5.0"  # Ed25519
+# Background jobs
+celery = "^5.4.0"
+redis = "^5.2.0"
+# Object store
+minio = "^7.2.10"
+# Policy engine client
+httpx = "^0.27.2"
+# YAML config
+pyyaml = "^6.0.2"
+# Structured logging
+structlog = "^24.4.0"
+# OpenAI-compatible client (for vLLM-on-ROCm calls)
+openai = "^1.54.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.3"
+pytest-asyncio = "^0.24.0"
+pytest-cov = "^6.0.0"
+hypothesis = "^6.115.0"
+schemathesis = "^3.39.0"
+ruff = "^0.7.0"
+mypy = "^1.13.0"
+testcontainers = { extras = ["postgres", "redis"], version = "^4.8.0" }
+freezegun = "^1.5.1"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["docs", "_backup", ".venv", "node_modules"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "S",   # bandit (security)
+    "C4",  # flake8-comprehensions
+]
+ignore = [
+    "S101",  # assert is fine in tests
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106"]  # asserts and test fixtures
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+exclude = ["docs", "_backup", "\\.venv", "node_modules"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = [
+    "apps/runtime/tests",
+    "apps/control-plane-api/tests",
+    "packages/verixa-python/tests",
+]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=verixa",
+    "--cov=verixa_runtime",
+    "--cov=verixa_control_plane",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: integration tests requiring docker-compose stack",
+    "e2e: end-to-end tests requiring full stack",
+    "live_mi300x: tests against live AMD MI300X droplet (requires network + endpoint config)",
+]
+
+[tool.coverage.run]
+source = ["packages/verixa-python/verixa", "apps/runtime/verixa_runtime", "apps/control-plane-api/verixa_control_plane"]
+omit = ["*/tests/*", "*/_backup/*"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
