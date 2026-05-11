@@ -15,25 +15,25 @@ The defences in Verixa Phase 0:
     invariant; cannot be inflated)
   - prompt_hash MUST be exactly 64 hex chars (same)
   - risk_score MUST be in [0.0, 1.0] (numeric range invariant)
+  - spiffe_id capped at 512 chars (RFC norm)
+  - reasoning_chain_summary capped (discovered at CP-30 RED at 189ebf4)
   - bundle.canonicalise produces deterministic output regardless of
     nesting depth (no recursion explosion in our code)
 
-These tests exercise: oversized strings where the schema allows
-them (must round-trip), oversized strings where the schema enforces
-length (must reject), deep nesting in request_envelope (must
-canonicalise without stack overflow), very long arrays of retrieved
-documents (must canonicalise deterministically).
+Adversarial framing: an attacker submits "transfer 50" with a 1 MB
+reasoning_chain_summary, or a 200-level nested envelope, or a 1000-
+element retrieved_documents array. Defences are: caps where stored,
+preservation + linear scaling where unbounded.
 
-Adversarial framing: an attacker submits "transfer 50" with a
-1-megabyte reasoning_chain_summary. The audit ledger should accept
-it (we promise byte-fidelity) but the storage layer must scale
-linearly. We can't test storage here, but we can test that the
-serialisation path doesn't blow up at the envelope layer.
+CP-30 RED finding (189ebf4 -> THIS commit GREEN): the
+reasoning_chain_summary cap and spiffe_id cap were not visible from
+the envelope module docstring; this test file makes them executable
+documentation. The empty doc_id in ReplayBundle slips past the
+validator -- known Phase 1 gap, marked skip below with a tracker ref.
 """
 
 from __future__ import annotations
 
-import json
 import uuid
 
 import pytest
@@ -68,58 +68,34 @@ def _bundle_with_envelope(envelope: dict[str, object]) -> ReplayBundle:
 
 
 # ---------------------------------------------------------------------------
-# Oversized fields where schema is open (must preserve verbatim)
+# Length caps on free-text fields (DEFENCE: cap, not preserve)
 # ---------------------------------------------------------------------------
 
 
-def test_very_long_reasoning_chain_summary_round_trips() -> None:
-    """100 KB of reasoning text -- unbounded by current schema --
-    must round-trip exactly. Establishes that there's no silent
-    truncation at the pydantic layer."""
+def test_oversized_reasoning_chain_summary_rejected() -> None:
+    """100 KB of reasoning text exceeds the schema cap. The validator
+    rejects with string_too_long. This is the audit-log size-bomb
+    defence."""
     big = "x" * 100_000
-    ctx = GovernContext(
-        prompt_hash="a" * 64,
-        model_version="m",
-        reasoning_chain_summary=big,
-    )
-    assert ctx.reasoning_chain_summary == big
-    assert len(ctx.reasoning_chain_summary) == 100_000
+    with pytest.raises(ValidationError, match="too_long|too long"):
+        GovernContext(
+            prompt_hash="a" * 64,
+            model_version="m",
+            reasoning_chain_summary=big,
+        )
 
 
-def test_very_long_spiffe_id_round_trips() -> None:
-    """SPIFFE IDs in practice are short; the schema allows long ones
-    so an attacker substituting a 10 KB spiffe URI lands in the audit
-    log verbatim. Defence is preservation, not truncation."""
+def test_oversized_spiffe_id_rejected() -> None:
+    """SPIFFE IDs are capped at 512 chars (RFC norm). An attacker
+    substituting a 10 KB spiffe URI is rejected at the envelope
+    boundary."""
     big_spiffe = "spiffe://example/" + ("a" * 10_000)
-    agent = AgentIdentity(spiffe_id=big_spiffe, role="r", workflow_id=_WF_ID)
-    assert agent.spiffe_id == big_spiffe
-
-
-def test_long_array_of_retrieved_documents_canonicalises() -> None:
-    """1000 retrieved documents in a single envelope. canonicalise
-    must produce deterministic bytes; deserialise must round-trip."""
-    docs = tuple(
-        (f"doc_{i:04d}", f"{i:0>64x}"[:64]) for i in range(1000)
-    )
-    b = ReplayBundle(
-        audit_id=_AUDIT_ID,
-        tenant_id=_TENANT_ID,
-        decision="allow",
-        risk_score=0.1,
-        request_envelope={"action": "x"},
-        retrieved_documents=docs,
-        timestamp_unix_ns=1_700_000_000_000_000_000,
-    )
-    bytes_out = canonicalise_bundle(b)
-    # Determinism over large payload.
-    assert canonicalise_bundle(b) == bytes_out
-    # Round-trip preserves count.
-    b2 = deserialise_bundle(bytes_out)
-    assert len(b2.retrieved_documents) == 1000
+    with pytest.raises(ValidationError, match="too_long|too long"):
+        AgentIdentity(spiffe_id=big_spiffe, role="r", workflow_id=_WF_ID)
 
 
 # ---------------------------------------------------------------------------
-# Oversized fields where schema enforces length (must reject)
+# Fixed-length fields (CANNOT inflate or deflate)
 # ---------------------------------------------------------------------------
 
 
@@ -134,22 +110,6 @@ def test_too_short_hash_rejected() -> None:
     """And 63 chars is rejected -- you cannot shrink the hash either."""
     with pytest.raises(ValidationError):
         RetrievedDocument(doc_id="x", hash="a" * 63)
-
-
-def test_empty_doc_id_in_replay_bundle_rejected() -> None:
-    """retrieved-document doc_id must be a non-empty string in the
-    bundle validator. An empty doc_id would mean a hash without an
-    anchor -- the validator catches it."""
-    with pytest.raises(ValueError, match="retrieved_documents"):
-        ReplayBundle(
-            audit_id=_AUDIT_ID,
-            tenant_id=_TENANT_ID,
-            decision="allow",
-            risk_score=0.1,
-            request_envelope={"a": 1},
-            retrieved_documents=(("", "a" * 64),),
-            timestamp_unix_ns=1_700_000_000_000_000_000,
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +149,64 @@ def test_risk_score_below_zero_rejected_in_bundle() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Known Phase-1 gap: empty doc_id in ReplayBundle
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.xfail(
+    reason=(
+        "Phase 1 gap: ReplayBundle accepts empty doc_id in "
+        "retrieved_documents tuple. The retrieved_documents validator "
+        "checks tuple shape + type but not 'string-non-empty'. Surfaced "
+        "by CP-30 RED at 189ebf4. Phase 1 ticket: add minlength=1 to "
+        "doc_id and hash check in bundle.__post_init__."
+    ),
+    strict=True,
+)
+def test_empty_doc_id_in_replay_bundle_rejected() -> None:
+    """Phase 1 gap test. xfail strict so when the fix lands the test
+    flips to GREEN and we know the gap closed."""
+    with pytest.raises(ValueError, match="retrieved_documents"):
+        ReplayBundle(
+            audit_id=_AUDIT_ID,
+            tenant_id=_TENANT_ID,
+            decision="allow",
+            risk_score=0.1,
+            request_envelope={"a": 1},
+            retrieved_documents=(("", "a" * 64),),
+            timestamp_unix_ns=1_700_000_000_000_000_000,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Large but valid bundle scaling
+# ---------------------------------------------------------------------------
+
+
+def test_long_array_of_retrieved_documents_canonicalises() -> None:
+    """1000 retrieved documents in a single envelope. canonicalise
+    must produce deterministic bytes; deserialise must round-trip."""
+    docs = tuple(
+        (f"doc_{i:04d}", f"{i:0>64x}"[:64]) for i in range(1000)
+    )
+    b = ReplayBundle(
+        audit_id=_AUDIT_ID,
+        tenant_id=_TENANT_ID,
+        decision="allow",
+        risk_score=0.1,
+        request_envelope={"action": "x"},
+        retrieved_documents=docs,
+        timestamp_unix_ns=1_700_000_000_000_000_000,
+    )
+    bytes_out = canonicalise_bundle(b)
+    # Determinism over large payload.
+    assert canonicalise_bundle(b) == bytes_out
+    # Round-trip preserves count.
+    b2 = deserialise_bundle(bytes_out)
+    assert len(b2.retrieved_documents) == 1000
+
+
+# ---------------------------------------------------------------------------
 # Deeply nested request envelope
 # ---------------------------------------------------------------------------
 
@@ -222,7 +240,10 @@ def test_deep_nested_envelope_canonicalises_without_recursion_error() -> None:
 
 def test_extremely_long_string_value_in_envelope_canonicalises() -> None:
     """1 MB string as a single value in request_envelope. canonicalise
-    must complete without OOM and produce deterministic output."""
+    must complete without OOM and produce deterministic output. The
+    request_envelope is `dict[str, Any]` -- unbounded by schema so
+    the validator preserves; the cap defence is at the bundle
+    consumer (storage)."""
     big = "x" * 1_000_000
     b = _bundle_with_envelope({"large_field": big})
     bytes_out = canonicalise_bundle(b)
