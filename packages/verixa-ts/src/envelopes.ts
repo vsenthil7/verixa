@@ -49,8 +49,17 @@
  *     - DossierGenerateResponse + parseDossierGenerateResponse
  *     - DossierGetResponse + parseDossierGetResponse
  *
- * The remaining envelopes (Webhook subscription + delivery) follow
- * in CP-68 to complete the typed-response surface on the TS side.
+ *   CP-68 (webhook -- COMPLETES the typed-response surface;
+ *   mirrors Python CP-64):
+ *     - WebhookSubscriptionSummary + parser
+ *     - WebhookSubscriptionListResponse + parser
+ *     - WebhookDeliverySummary + parser
+ *     - WebhookDeliveryListResponse + parser
+ *
+ * The full server-side response envelope set is now mirrored on
+ * both Python AND TypeScript SDKs. Next round (Phase-1+) wires
+ * opt-in returnTyped:true overloads on resource client methods
+ * across both SDKs per the v0.2.0 deprecation timeline.
  */
 
 // ---------------------------------------------------------------------------
@@ -779,5 +788,215 @@ export function parseDossierGetResponse(data: unknown): DossierGetResponse {
     ),
     signatureHex: sig,
     publicKeyHex: pub,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Webhook envelopes (CP-68; mirrors Python CP-64)
+// --
+// COMPLETES the typed-response surface on the TS side. After this commit
+// every server-side response envelope has a TypeScript SDK parser, matching
+// the Python SDK's CP-64 milestone.
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse an array of strings into an immutable frozen array.
+ * Per-element validation with index-prefixed field name (e.g.
+ * `event_types[1]`) for debuggability. Mirrors Python
+ * verixa.envelopes._as_str_list.
+ */
+function asStringList(value: unknown, name: string): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new InvalidEnvelopeError(
+      `field ${name}: expected array of strings, got ${typeof value}`,
+    );
+  }
+  const out: string[] = value.map((v, i) => {
+    if (typeof v !== 'string') {
+      throw new InvalidEnvelopeError(
+        `field ${name}[${i}]: expected string, got ${typeof v}`,
+      );
+    }
+    return v;
+  });
+  return Object.freeze(out);
+}
+
+/** Optional string field (null-or-string); mirrors Python _as_optional_str. */
+function asOptionalString(value: unknown, name: string): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return asString(value, name);
+}
+
+/**
+ * One subscription as returned by `GET /v1/control/webhooks/subscriptions`.
+ *
+ * Matches server-side WebhookSubscriptionSummary: subscription_id +
+ * tenant_id + url + event_types + signing_key_id + created_at.
+ * eventTypes is a frozen readonly array of strings (e.g.
+ * decision.recorded, dossier.generated, replay.requested).
+ * signingKeyId is the Vault-tracked key the dispatcher uses to
+ * Ed25519-sign deliveries (per webhook receiver verification
+ * protocol).
+ */
+export interface WebhookSubscriptionSummary {
+  readonly subscriptionId: string;
+  readonly tenantId: string;
+  readonly url: string;
+  readonly eventTypes: readonly string[];
+  readonly signingKeyId: string;
+  readonly createdAt: Date;
+}
+
+export function parseWebhookSubscriptionSummary(
+  data: unknown,
+): WebhookSubscriptionSummary {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for WebhookSubscriptionSummary, got ${typeof data}`,
+    );
+  }
+  return {
+    subscriptionId: asUuid(
+      requireField(data, 'subscription_id', 'subscription_id'),
+      'subscription_id',
+    ),
+    tenantId: asUuid(
+      requireField(data, 'tenant_id', 'tenant_id'),
+      'tenant_id',
+    ),
+    url: asString(requireField(data, 'url', 'url'), 'url'),
+    eventTypes: asStringList(
+      requireField(data, 'event_types', 'event_types'),
+      'event_types',
+    ),
+    signingKeyId: asString(
+      requireField(data, 'signing_key_id', 'signing_key_id'),
+      'signing_key_id',
+    ),
+    createdAt: asDateTime(
+      requireField(data, 'created_at', 'created_at'),
+      'created_at',
+    ),
+  };
+}
+
+/** Server response to `GET /v1/control/webhooks/subscriptions`. */
+export interface WebhookSubscriptionListResponse {
+  readonly subscriptions: readonly WebhookSubscriptionSummary[];
+  readonly total: number;
+}
+
+export function parseWebhookSubscriptionListResponse(
+  data: unknown,
+): WebhookSubscriptionListResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for WebhookSubscriptionListResponse, ` +
+        `got ${typeof data}`,
+    );
+  }
+  const items = requireField(data, 'subscriptions', 'subscriptions');
+  if (!Array.isArray(items)) {
+    throw new InvalidEnvelopeError(
+      `field subscriptions: expected array, got ${typeof items}`,
+    );
+  }
+  const parsed: WebhookSubscriptionSummary[] = items.map((item) =>
+    parseWebhookSubscriptionSummary(item),
+  );
+  return {
+    subscriptions: Object.freeze(parsed),
+    total: asInt(requireField(data, 'total', 'total'), 'total'),
+  };
+}
+
+/**
+ * One forensic delivery record from `GET /v1/control/webhooks/deliveries`.
+ *
+ * Matches server-side WebhookDeliverySummary: attempt_id +
+ * subscription_id + event_id + url + status_code + latency_ms +
+ * attempted_at + optional error. error is `null` on successful
+ * delivery (2xx response); on failure carries the exception
+ * description (e.g. "connection refused", "timeout after 5s",
+ * "HTTP 500 internal server error").
+ */
+export interface WebhookDeliverySummary {
+  readonly attemptId: string;
+  readonly subscriptionId: string;
+  readonly eventId: string;
+  readonly url: string;
+  readonly statusCode: number;
+  readonly latencyMs: number;
+  readonly attemptedAt: Date;
+  readonly error: string | null;
+}
+
+export function parseWebhookDeliverySummary(
+  data: unknown,
+): WebhookDeliverySummary {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for WebhookDeliverySummary, got ${typeof data}`,
+    );
+  }
+  return {
+    attemptId: asUuid(
+      requireField(data, 'attempt_id', 'attempt_id'),
+      'attempt_id',
+    ),
+    subscriptionId: asUuid(
+      requireField(data, 'subscription_id', 'subscription_id'),
+      'subscription_id',
+    ),
+    eventId: asUuid(
+      requireField(data, 'event_id', 'event_id'),
+      'event_id',
+    ),
+    url: asString(requireField(data, 'url', 'url'), 'url'),
+    statusCode: asInt(
+      requireField(data, 'status_code', 'status_code'),
+      'status_code',
+    ),
+    latencyMs: asInt(
+      requireField(data, 'latency_ms', 'latency_ms'),
+      'latency_ms',
+    ),
+    attemptedAt: asDateTime(
+      requireField(data, 'attempted_at', 'attempted_at'),
+      'attempted_at',
+    ),
+    error: asOptionalString(data['error'], 'error'),
+  };
+}
+
+/** Server response to `GET /v1/control/webhooks/deliveries`. */
+export interface WebhookDeliveryListResponse {
+  readonly deliveries: readonly WebhookDeliverySummary[];
+  readonly total: number;
+}
+
+export function parseWebhookDeliveryListResponse(
+  data: unknown,
+): WebhookDeliveryListResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for WebhookDeliveryListResponse, got ${typeof data}`,
+    );
+  }
+  const items = requireField(data, 'deliveries', 'deliveries');
+  if (!Array.isArray(items)) {
+    throw new InvalidEnvelopeError(
+      `field deliveries: expected array, got ${typeof items}`,
+    );
+  }
+  const parsed: WebhookDeliverySummary[] = items.map((item) =>
+    parseWebhookDeliverySummary(item),
+  );
+  return {
+    deliveries: Object.freeze(parsed),
+    total: asInt(requireField(data, 'total', 'total'), 'total'),
   };
 }
