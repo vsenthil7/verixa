@@ -15,12 +15,54 @@
  * Tests live in ./tests-e2e/*.spec.ts. They're separate from vitest
  * unit tests (./src/**\/__tests__/*.test.ts) so the two runners
  * don't fight over the same glob.
+ *
+ * Cross-platform uvicorn invocation:
+ *   The same config runs on a Windows dev box AND on Linux CI
+ *   runners. process.platform branches between
+ *   ``.venv\Scripts\python`` (Windows venv layout) and
+ *   ``.venv/bin/python`` (Linux/macOS venv layout).
+ *   VERIXA_UVICORN_CMD env override wins over both -- used by
+ *   GitHub Actions to point at the runner's installed Poetry venv
+ *   path explicitly (CP-21.2).
  */
 
+import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
 
 const FRONTEND_PORT = 3000;
 const BACKEND_PORT = 8001;
+
+/**
+ * Build the uvicorn command for the FastAPI Control Plane.
+ *
+ * Precedence:
+ *   1. VERIXA_UVICORN_CMD env var (CI sets this explicitly).
+ *   2. process.platform === 'win32' -> .venv\Scripts\python -m uvicorn
+ *   3. anything else                -> .venv/bin/python -m uvicorn
+ */
+function buildUvicornCommand(): string {
+  const override = process.env.VERIXA_UVICORN_CMD;
+  if (override !== undefined && override.length > 0) {
+    return (
+      `${override} verixa_control_plane.asgi:app ` +
+      `--host 127.0.0.1 --port ${BACKEND_PORT} --workers 1`
+    );
+  }
+  const isWindows = process.platform === 'win32';
+  const pythonPath = isWindows
+    ? path.join('.venv', 'Scripts', 'python')
+    : path.join('.venv', 'bin', 'python');
+  return (
+    `${pythonPath} -m uvicorn verixa_control_plane.asgi:app ` +
+    `--host 127.0.0.1 --port ${BACKEND_PORT} --workers 1`
+  );
+}
+
+// Absolute path to the monorepo root (two parents up from
+// apps/control-plane-ui/). The FastAPI webServer must boot from
+// there so the .venv and the verixa_control_plane import path
+// resolve consistently across platforms.
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 export default defineConfig({
   testDir: './tests-e2e',
@@ -56,12 +98,11 @@ export default defineConfig({
   webServer: [
     {
       // FastAPI control plane with seeded demo data.
-      // Run from the monorepo root so the .venv python and the
-      // verixa_control_plane import path resolve.
-      command:
-        `cd ../.. && .venv\\Scripts\\python -m uvicorn ` +
-        `verixa_control_plane.asgi:app --host 127.0.0.1 ` +
-        `--port ${BACKEND_PORT} --workers 1`,
+      // ``cwd`` is honoured by Playwright -- we point it at the
+      // monorepo root so the relative .venv path resolves and the
+      // verixa_control_plane Python package is importable.
+      command: buildUvicornCommand(),
+      cwd: REPO_ROOT,
       url: `http://127.0.0.1:${BACKEND_PORT}/healthz`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

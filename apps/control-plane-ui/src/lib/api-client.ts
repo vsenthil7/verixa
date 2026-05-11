@@ -198,7 +198,18 @@ export function createApiClient(config: ApiClientConfig): ApiClient {
     init?: RequestInit,
   ): Promise<T> {
     const url = `${baseUrl}${path}`;
+    // ``cache: 'no-store'`` opts every call out of Next.js's
+    // patched-fetch cache in Server Components. Without this,
+    // GET requests with no Authorization header (which is every
+    // call from the Phase-0 UI) are cached by default and a
+    // stale empty response from the first render of /
+    // (potentially mid-seed) persists for the whole dev session.
+    // Caught by the CP-21 Playwright suite as a 2/18 failure
+    // on a Windows dev box; the diag scripts in _backup/diag_*
+    // confirmed the FastAPI returned 3 entries while the SSR'd
+    // dashboard rendered "No decisions in the last 30 days".
     const response = await doFetch(url, {
+      cache: 'no-store',
       ...init,
       headers: {
         'Content-Type': 'application/json',

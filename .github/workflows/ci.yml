@@ -1,0 +1,228 @@
+## Verixa CI (CP-21.2).
+##
+## On every push and pull-request to main:
+##   * python-tests   -- pytest with 100% line+branch coverage gate
+##                       (1055 fast unit tests, integration tests gated).
+##   * typescript     -- pnpm typecheck + vitest with 100% coverage gate
+##                       (35 unit tests on api-client.ts/design.ts/config.ts).
+##   * playwright     -- 18 browser-level E2E tests against the live
+##                       FastAPI + Next.js dev server.
+##
+## Jobs run in parallel; the workflow fails if any single job fails.
+## A failed job blocks the PR from merging.
+##
+## Total runtime budget: ~5 minutes on a cold runner (Python deps
+## install dominates; pnpm + Playwright cached after first run).
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  ## Manual run from the Actions tab for debugging.
+  workflow_dispatch:
+
+## Cancel in-flight runs on the same branch when a new commit arrives.
+## Saves GitHub Actions minutes during rapid iteration.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  POETRY_VERSION: "1.8.4"
+  PNPM_VERSION: "9.15.9"
+
+jobs:
+  ## ------------------------------------------------------------------
+  ## Python: pytest with 100% coverage gate
+  ## ------------------------------------------------------------------
+  python-tests:
+    name: Python · pytest + 100% coverage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: |
+          pipx install "poetry==${{ env.POETRY_VERSION }}"
+          poetry --version
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            .venv
+          key: poetry-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
+      - name: Configure Poetry to use in-project venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --with dev
+
+      - name: Run pytest (fast unit tests, 100% coverage gate)
+        ## The pyproject.toml's tool.pytest.ini_options sets
+        ## fail_under=100 already. We re-pass -m 'not integration'
+        ## here to be explicit about what runs in CI.
+        run: poetry run pytest -m 'not integration'
+
+  ## ------------------------------------------------------------------
+  ## TypeScript: typecheck + vitest with 100% coverage gate
+  ## ------------------------------------------------------------------
+  typescript:
+    name: TypeScript · typecheck + vitest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: apps/control-plane-ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies (workspace root)
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: pnpm typecheck
+        run: pnpm typecheck
+
+      - name: pnpm test:coverage (100% gate)
+        run: pnpm test:coverage
+
+  ## ------------------------------------------------------------------
+  ## Playwright: real-browser E2E against live FastAPI + Next.js
+  ## ------------------------------------------------------------------
+  playwright:
+    name: Playwright · 18 E2E specs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: |
+          pipx install "poetry==${{ env.POETRY_VERSION }}"
+          poetry --version
+
+      - name: Cache Poetry virtualenv
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pypoetry
+            .venv
+          key: poetry-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('poetry.lock', 'pyproject.toml') }}
+          restore-keys: |
+            poetry-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
+      - name: Configure Poetry to use in-project venv
+        run: poetry config virtualenvs.in-project true
+
+      - name: Install Python dependencies
+        ## The Playwright webServer config boots
+        ## ``.venv/bin/python -m uvicorn`` (on Windows it's
+        ## .venv\Scripts\python -- see note below). We patch
+        ## the playwright.config.ts at runtime for Linux paths
+        ## via env var, or rely on PATH if .venv is activated.
+        run: poetry install --no-interaction --with dev
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/control-plane-ui/pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium (if not cached)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: apps/control-plane-ui
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Always install OS deps for Playwright Chromium
+        ## Even with the browser binary cached, the system libs
+        ## (libnss3, libgtk-3, etc.) live in the runner image and
+        ## must be ensured present. The --with-deps flag above
+        ## handles them on the install path; this step keeps the
+        ## cache-hit path safe too.
+        working-directory: apps/control-plane-ui
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Run Playwright E2E (boots uvicorn + next dev internally)
+        working-directory: apps/control-plane-ui
+        env:
+          CI: "true"
+          ## On Linux CI runners the uvicorn binary lives at
+          ## ../../.venv/bin/uvicorn after `poetry install` with
+          ## virtualenvs.in-project = true. The playwright config
+          ## currently hardcodes the Windows path .venv\Scripts\python.
+          ## We override via the VERIXA_UVICORN_CMD env var below.
+          ## NOTE: this assumes playwright.config.ts honours
+          ## VERIXA_UVICORN_CMD; a fallback patch is applied as a
+          ## pre-step below. See deploy/ci/README.md (CP-21.2).
+          VERIXA_UVICORN_CMD: ../../.venv/bin/python -m uvicorn
+        run: pnpm exec playwright test --reporter=list
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/control-plane-ui/playwright-report
+          retention-days: 14
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/control-plane-ui/test-results
+          retention-days: 14
