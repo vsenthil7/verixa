@@ -352,12 +352,9 @@ This is a scaffold; customer's privacy team adapts to their specific notice voic
 
 ## 12. Data Protection Impact Assessment (DPIA) support
 
-Verixa supplies a complete DPIA template at [DPIA_TEMPLATE.md](DPIA_TEMPLATE.md) covering ICO + EDPB DPIA structure (Sections A through G: identifying the need, describing the processing, necessity and proportionality, risk register, mitigations, sign-off and decision, maintenance). The template is the customer-facing artefact a customer DPO completes; this section describes what Verixa provides as input.
-
 For customer-led DPIAs, Verixa provides:
 
 - This Data Protection & Privacy document
-- The DPIA template ([DPIA_TEMPLATE.md](DPIA_TEMPLATE.md))
 - The Threat Model document
 - The Security Architecture document
 - The Regulatory Mapping Matrix
@@ -370,12 +367,9 @@ For customer-led DPIAs, Verixa provides:
 
 DPIA content covering Verixa's role:
 - Necessity and proportionality of using Verixa for the customer's AI governance
-- Risks identified by Verixa Threat Model (cross-referenced in DPIA_TEMPLATE.md Section D)
-- Mitigations per Verixa Security Architecture and TOMs (DPIA_TEMPLATE.md Section E)
-- Residual risks after mitigation (DPIA_TEMPLATE.md Section F)
-
-The DPIA itself is the customer's accountability under Article 35; Verixa supports completion but does not approve or authorise the customer's DPIA. The customer's DPO is the accountable party for the DPIA outcome.
-
+- Risks identified by Verixa Threat Model
+- Mitigations per Verixa Security Architecture and TOMs
+- Residual risks after mitigation
 
 ---
 
