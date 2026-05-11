@@ -1,0 +1,55 @@
+# Build context exclusions for the Verixa Control Plane HF Spaces
+# image (CP-17). Mirrors what's NOT copied in the Dockerfile, so
+# the build context stays small and the daemon doesn't tarball the
+# whole monorepo.
+
+# Build / cache artifacts
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/htmlcov
+**/.coverage
+**/coverage.xml
+**/.next
+**/dist
+**/build
+
+# Node / pnpm
+**/node_modules
+**/.turbo
+
+# Editor / OS
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Source-control + CI
+.git
+.github
+.gitignore
+.gitattributes
+
+# Tests + dev tooling we explicitly don't ship in the image
+**/tests
+docker-compose.yml
+docker-compose.*.yml
+
+# Monorepo packages NOT part of the runtime surface
+apps/control-plane-ui
+submission
+submission_media
+_backup
+docs
+scripts
+tools
+
+# Python project metadata (the image installs from pip directly)
+poetry.lock
+pyproject.toml
+
+# Anything in deploy/ that isn't the HF Spaces Dockerfile itself
+deploy/*
+!deploy/huggingface
