@@ -57,6 +57,7 @@ from typing import Any, Literal, overload
 import httpx
 
 from verixa.envelopes import (
+    AgentRegisterResponse,
     WorkflowListResponse,
     WorkflowRegisterResponse,
 )
@@ -283,27 +284,74 @@ class WorkflowsClient(_SubClient):
 
 
 class AgentsClient(_SubClient):
-    """Agent registration."""
+    """Agent registration.
+
+    CP-71 corrects the CP-50 wire-format bug: server's
+    ``AgentRegisterRequest`` accepts ``workflow_id + spiffe_id +
+    role + description``; the CP-50 SDK sent ``workflow_id + name +
+    model_provider + model_name`` which the strict ``extra='forbid'``
+    schema rejects. Adds opt-in ``return_typed=True`` overload that
+    returns ``AgentRegisterResponse`` instead of plain dict.
+    """
+
+    @overload
+    async def register(
+        self,
+        *,
+        workflow_id: uuid.UUID,
+        spiffe_id: str,
+        role: str,
+        description: str = ...,
+        return_typed: Literal[True],
+    ) -> AgentRegisterResponse: ...
+
+    @overload
+    async def register(
+        self,
+        *,
+        workflow_id: uuid.UUID,
+        spiffe_id: str,
+        role: str,
+        description: str = ...,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def register(
         self,
         *,
         workflow_id: uuid.UUID,
-        name: str,
-        model_provider: str,
-        model_name: str,
-    ) -> dict[str, Any]:
-        return await _request_json(
+        spiffe_id: str,
+        role: str,
+        description: str = "",
+        return_typed: bool = False,
+    ) -> dict[str, Any] | AgentRegisterResponse:
+        """Register an agent under a workflow.
+
+        Args:
+            workflow_id: the workflow under which this agent operates.
+            spiffe_id: the agent's SPIFFE identity (1..512 chars).
+                Phase-0 bypasses SPIFFE verification but the field is
+                recorded for forward compatibility with CP-53 mTLS.
+            role: the agent's role (e.g. ``gateway``, ``reviewer``);
+                1..128 chars.
+            description: free-text description; defaults to empty.
+            return_typed: if True, returns ``AgentRegisterResponse``
+                dataclass instead of a dict.
+        """
+        data = await _request_json(
             self._http,
             "POST",
             "/v1/control/agents",
             json={
                 "workflow_id": str(workflow_id),
-                "name": name,
-                "model_provider": model_provider,
-                "model_name": model_name,
+                "spiffe_id": spiffe_id,
+                "role": role,
+                "description": description,
             },
         )
+        if return_typed:
+            return AgentRegisterResponse.from_dict(data)
+        return data
 
 
 class ToolsClient(_SubClient):

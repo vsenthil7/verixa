@@ -449,23 +449,104 @@ async def test_workflows_list_return_typed_bubbles_envelope_error() -> None:
 
 @pytest.mark.asyncio
 async def test_agents_register_posts_correct_body() -> None:
+    """CP-71 corrects the CP-50 wire-format bug: server's
+    ``AgentRegisterRequest`` accepts ``workflow_id + spiffe_id +
+    role + description``; the CP-50 SDK sent ``workflow_id + name +
+    model_provider + model_name`` which the strict ``extra='forbid'``
+    schema rejects."""
     captured: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["body"] = json.loads(request.content)
         return httpx.Response(
-            201, request=request, json={"agent_id": str(uuid.uuid4())}
+            201,
+            request=request,
+            json={
+                "agent_id": str(uuid.uuid4()),
+                "workflow_id": str(_WORKFLOW),
+                "spiffe_id": "spiffe://verixa.local/prod/gw/1",
+                "role": "gateway",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
         )
 
     async with _make_client_with_handler(handler) as c:
         await c.agents.register(
             workflow_id=_WORKFLOW,
-            name="reviewer-1",
-            model_provider="amd-mi300x",
-            model_name="qwen3-0.6b",
+            spiffe_id="spiffe://verixa.local/prod/gw/1",
+            role="gateway",
+            description="payments gateway",
         )
     assert captured["body"]["workflow_id"] == str(_WORKFLOW)
-    assert captured["body"]["model_provider"] == "amd-mi300x"
+    assert captured["body"]["spiffe_id"] == "spiffe://verixa.local/prod/gw/1"
+    assert captured["body"]["role"] == "gateway"
+    assert captured["body"]["description"] == "payments gateway"
+    # CP-71 bug-fix: legacy fields MUST NOT be sent (server rejects)
+    assert "name" not in captured["body"]
+    assert "model_provider" not in captured["body"]
+    assert "model_name" not in captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_agents_register_description_defaults_to_empty_string() -> None:
+    """Server default for description is empty string."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "agent_id": str(uuid.uuid4()),
+                "workflow_id": str(_WORKFLOW),
+                "spiffe_id": "x",
+                "role": "y",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        await c.agents.register(
+            workflow_id=_WORKFLOW,
+            spiffe_id="spiffe://x",
+            role="gateway",
+        )
+    assert captured["body"]["description"] == ""
+
+
+@pytest.mark.asyncio
+async def test_agents_register_return_typed_true_returns_dataclass() -> None:
+    """CP-71 opt-in: ``return_typed=True`` returns
+    ``AgentRegisterResponse`` dataclass."""
+    from verixa.envelopes import AgentRegisterResponse
+
+    agent_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "agent_id": str(agent_id),
+                "workflow_id": str(_WORKFLOW),
+                "spiffe_id": "spiffe://verixa.local/prod/gw/1",
+                "role": "gateway",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.agents.register(
+            workflow_id=_WORKFLOW,
+            spiffe_id="spiffe://verixa.local/prod/gw/1",
+            role="gateway",
+            return_typed=True,
+        )
+    assert isinstance(result, AgentRegisterResponse)
+    assert result.agent_id == agent_id
+    assert result.workflow_id == _WORKFLOW
+    assert result.role == "gateway"
 
 
 @pytest.mark.asyncio
