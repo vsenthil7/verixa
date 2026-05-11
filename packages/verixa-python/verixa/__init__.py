@@ -15,7 +15,7 @@ Typed response envelopes (re-exported from envelopes.py):
 The full server-side response envelope set is mirrored as of CP-64.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __author__ = "v_sen"
 __license__ = "MIT"
 

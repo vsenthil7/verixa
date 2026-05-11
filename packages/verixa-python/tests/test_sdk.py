@@ -195,7 +195,7 @@ def test_verixa_client_strips_trailing_slash() -> None:
 
 def test_verixa_client_sends_user_agent() -> None:
     c = VerixaClient(base_url="https://verixa.test")
-    assert "verixa-python/0.1.0" in c._http.headers["User-Agent"]
+    assert "verixa-python/0.2.0" in c._http.headers["User-Agent"]
 
 
 def test_verixa_client_with_api_key_sets_authorization_header() -> None:

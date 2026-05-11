@@ -840,7 +840,7 @@ class VerixaClient(AbstractAsyncContextManager["VerixaClient"]):
                 f"base_url must start with http:// or https://; got {base_url!r}"
             )
         headers = {
-            "User-Agent": "verixa-python/0.1.0",
+            "User-Agent": "verixa-python/0.2.0",
             "Accept": "application/json",
         }
         if api_key is not None:

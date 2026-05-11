@@ -181,12 +181,12 @@ describe('VerixaClient construction', () => {
     expect(captured[0]?.url).toBe('https://verixa.test/v1/control/workflows');
   });
 
-  it('sends User-Agent verixa-ts/0.1.0', async () => {
+  it('sends User-Agent verixa-ts/0.2.0', async () => {
     const { fetchImpl, captured } = makeMockFetch({ body: {} });
     const c = new VerixaClient({ baseUrl: 'https://verixa.test', fetchImpl });
     await c.workflows.list();
     const headers = captured[0]?.init?.headers as Record<string, string>;
-    expect(headers['User-Agent']).toBe('verixa-ts/0.1.0');
+    expect(headers['User-Agent']).toBe('verixa-ts/0.2.0');
   });
 
   it('sets Authorization header when apiKey provided', async () => {

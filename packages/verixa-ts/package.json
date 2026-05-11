@@ -1,6 +1,6 @@
 {
   "name": "@verixa/ts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Async TypeScript SDK for the Verixa Control Plane API (audit + governance layer for AI agent workflows)",
   "license": "MIT",
   "type": "module",

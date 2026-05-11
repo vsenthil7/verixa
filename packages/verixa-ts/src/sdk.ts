@@ -630,7 +630,7 @@ export class VerixaClient {
     }
     const baseUrl = opts.baseUrl.replace(/\/+$/, '');
     const defaultHeaders: Record<string, string> = {
-      'User-Agent': 'verixa-ts/0.1.0',
+      'User-Agent': 'verixa-ts/0.2.0',
       Accept: 'application/json',
       'Content-Type': 'application/json',
     };
