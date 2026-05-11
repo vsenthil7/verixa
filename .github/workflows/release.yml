@@ -1,0 +1,270 @@
+## Verixa SDK release workflow (CP-59).
+##
+## Tag-triggered publish workflow that ties together CP-54..CP-58:
+##
+##   1. Verifies the OpenAPI committed artifact matches the live schema
+##      (CP-54 drift gate; merge-time guarantee, re-checked at tag time)
+##   2. Runs the full pytest + ruff + 100% coverage gate
+##   3. Runs the vitest + TypeScript typecheck gate
+##   4. Builds the verixa-python wheel + sdist via `python -m build`
+##      (using the CP-58 hatchling pyproject.toml)
+##   5. Builds the @verixa/ts npm tarball via `npm pack`
+##   6. Publishes to PyPI via trusted-publisher OIDC (no API token stored)
+##   7. Publishes to npm with `--provenance` (SLSA build provenance)
+##   8. Creates a GitHub Release with the wheel + sdist + tarball attached
+##
+## Trigger: pushed git tag matching `v*` (e.g. `v0.1.0`, `v0.2.1`).
+## Both SDKs are released in lockstep -- a single git tag publishes both
+## at the same version. This matches the monorepo + dual-SDK design
+## (Python + TS are intentionally feature-parity).
+##
+## Setup required before first run (one-time, per ecosystem):
+##   * PyPI:   configure trusted publisher at https://pypi.org/manage/account/publishing/
+##             with workflow file `release.yml` + environment `release-pypi`
+##   * npm:    enable provenance for the @verixa scope at
+##             https://docs.npmjs.com/generating-provenance-statements
+##             + add NPM_TOKEN secret with publish:packages scope (until npm
+##             trusted publishing GA -- as of 2026-Q1, still token-based)
+##
+## Dry-run from the Actions tab via workflow_dispatch (publish steps
+## conditioned on github.event_name == 'push').
+
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Skip publish steps (build + test only)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false  ## never cancel a release in flight
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "22"
+  POETRY_VERSION: "1.8.4"
+  PNPM_VERSION: "9.15.9"
+
+jobs:
+  ## ----------------------------------------------------------------------
+  ## 1. Verify -- run the same gates a PR merge would
+  ## ----------------------------------------------------------------------
+  verify:
+    name: verify (test + drift + lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Poetry
+        run: pipx install poetry==${{ env.POETRY_VERSION }}
+
+      - name: Install pnpm
+        run: npm install -g pnpm@${{ env.PNPM_VERSION }}
+
+      - name: Install Python deps
+        run: poetry install --with dev
+
+      - name: Install TS deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Pytest with 100% coverage gate
+        run: poetry run pytest -m 'not integration'
+
+      - name: Ruff lint gate
+        run: poetry run ruff check
+
+      - name: OpenAPI drift gate (CP-54)
+        run: poetry run python -m tools.openapi_export diff
+
+      - name: TS typecheck
+        working-directory: packages/verixa-ts
+        run: npm run typecheck
+
+      - name: Vitest with coverage
+        working-directory: packages/verixa-ts
+        run: npm run test:coverage
+
+  ## ----------------------------------------------------------------------
+  ## 2. Build the Python wheel + sdist
+  ## ----------------------------------------------------------------------
+  build-python:
+    name: build verixa (Python)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install build
+        run: pip install build
+
+      - name: Build wheel + sdist
+        working-directory: packages/verixa-python
+        run: python -m build
+
+      - name: Upload Python artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-dist
+          path: packages/verixa-python/dist/
+          retention-days: 7
+
+  ## ----------------------------------------------------------------------
+  ## 3. Build the npm tarball
+  ## ----------------------------------------------------------------------
+  build-npm:
+    name: build @verixa/ts (npm)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@${{ env.PNPM_VERSION }}
+
+      - name: Install + build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @verixa/ts run build
+
+      - name: Pack tarball
+        working-directory: packages/verixa-ts
+        run: npm pack --pack-destination dist
+
+      - name: Upload npm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-dist
+          path: packages/verixa-ts/dist/
+          retention-days: 7
+
+  ## ----------------------------------------------------------------------
+  ## 4. Publish to PyPI via trusted-publisher OIDC
+  ## ----------------------------------------------------------------------
+  publish-pypi:
+    name: publish to PyPI
+    needs: [build-python, build-npm]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: release-pypi
+      url: https://pypi.org/project/verixa/
+    permissions:
+      id-token: write  ## required for trusted-publisher OIDC
+    steps:
+      - name: Download Python artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          ## skip-existing keeps the workflow idempotent if a retry runs
+          ## after a partial success.
+          skip-existing: true
+
+  ## ----------------------------------------------------------------------
+  ## 5. Publish to npm with provenance
+  ## ----------------------------------------------------------------------
+  publish-npm:
+    name: publish to npm
+    needs: [build-python, build-npm]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: release-npm
+      url: https://www.npmjs.com/package/@verixa/ts
+    permissions:
+      id-token: write  ## required for npm provenance attestation
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install pnpm
+        run: npm install -g pnpm@${{ env.PNPM_VERSION }}
+
+      - name: Install + build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @verixa/ts run build
+
+      - name: Publish with provenance
+        working-directory: packages/verixa-ts
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  ## ----------------------------------------------------------------------
+  ## 6. GitHub Release with both artifacts attached
+  ## ----------------------------------------------------------------------
+  github-release:
+    name: github release
+    needs: [publish-pypi, publish-npm]
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write  ## required to create a release
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Python artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: artifacts/python/
+
+      - name: Download npm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-dist
+          path: artifacts/npm/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            artifacts/python/*
+            artifacts/npm/*
