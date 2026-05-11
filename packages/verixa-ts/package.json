@@ -1,12 +1,37 @@
 {
   "name": "@verixa/ts",
   "version": "0.1.0",
-  "private": true,
-  "description": "Verixa shared TypeScript library (cross-cutting types, constants, helpers)",
+  "description": "Async TypeScript SDK for the Verixa Control Plane API (audit + governance layer for AI agent workflows)",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "author": {
+    "name": "v_sen",
+    "email": "v_sen@verixa.dev"
+  },
+  "homepage": "https://github.com/v-sen/verixa/tree/main/packages/verixa-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/v-sen/verixa.git",
+    "directory": "packages/verixa-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/v-sen/verixa/issues"
+  },
+  "keywords": [
+    "verixa",
+    "audit",
+    "ai-governance",
+    "compliance",
+    "opa",
+    "agents",
+    "llm-ops",
+    "sdk"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,9 +40,13 @@
     "./compliance-language": {
       "types": "./dist/compliance-language.d.ts",
       "import": "./dist/compliance-language.js"
+    },
+    "./sdk": {
+      "types": "./dist/sdk.d.ts",
+      "import": "./dist/sdk.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "CHANGELOG.md", "LICENSE"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "lint": "echo 'lint placeholder (CP-2.4 wires ESLint)'",
