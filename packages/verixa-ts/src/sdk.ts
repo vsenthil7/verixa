@@ -1,0 +1,430 @@
+/**
+ * CP-51 -- Verixa TypeScript SDK (alpha): async client for Control Plane API.
+ *
+ * Closes Phase-1 carry-forward "verixa-ts SDK to npm". Mirrors the
+ * `verixa.sdk` Python SDK from CP-50. Uses Node 20+ built-in `fetch`
+ * (no extra dependencies for the SDK itself).
+ *
+ * Usage:
+ *
+ *     import { VerixaClient } from '@verixa/ts';
+ *     const client = new VerixaClient({ baseUrl: 'https://verixa.acme.com' });
+ *     const wf = await client.workflows.register({
+ *       name: 'payments',
+ *       ownerTenantId: '...uuid...',
+ *     });
+ *
+ * Phase-0 deliverable (this commit):
+ *
+ *   - `VerixaClient`               top-level client
+ *   - `VerixaError`                base exception
+ *   - `VerixaHttpError`            HTTP non-2xx (carries status + body)
+ *   - `VerixaConnectionError`      transport failures
+ *   - Resource clients grouped by domain (workflows, agents, tools,
+ *     audit, replay, dossier, bundles, webhooks)
+ *
+ * Phase-1+ adds: retry-with-exponential-backoff for 5xx, mTLS via
+ * Node tls.connect, webhook receiver helper for inbound signatures,
+ * pagination iterator, extracted shared envelope types so the SDK
+ * returns typed objects instead of `unknown`.
+ *
+ * Design choices match CP-50 Python: async by default, validates base
+ * URL scheme, optional Bearer auth via apiKey, strips trailing slash,
+ * never puts secrets in query strings. The TS surface uses camelCase
+ * field names; the wire format remains snake_case to match the Python
+ * envelopes (mapping happens inside each request method).
+ */
+
+// ---------------------------------------------------------------------------
+// Exceptions
+// ---------------------------------------------------------------------------
+
+export class VerixaError extends Error {
+  override name = 'VerixaError';
+}
+
+export class VerixaHttpError extends VerixaError {
+  override name = 'VerixaHttpError';
+
+  constructor(
+    public readonly statusCode: number,
+    public readonly body: unknown,
+    public readonly url: string,
+  ) {
+    super(`Verixa HTTP ${statusCode} at ${url}: ${JSON.stringify(body)}`);
+  }
+}
+
+export class VerixaConnectionError extends VerixaError {
+  override name = 'VerixaConnectionError';
+
+  constructor(
+    public readonly url: string,
+    public readonly cause: unknown,
+  ) {
+    const causeName = cause instanceof Error ? cause.constructor.name : 'Error';
+    const causeMsg = cause instanceof Error ? cause.message : String(cause);
+    super(`Verixa transport error at ${url}: ${causeName}: ${causeMsg}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a Fetch implementation. Production uses globalThis.fetch (Node 20+).
+ * Tests inject a mock so we never make real network calls.
+ */
+export type FetchLike = typeof fetch;
+
+interface RequestOptions {
+  method: string;
+  path: string;
+  body?: unknown;
+  params?: Record<string, string>;
+  headers?: Record<string, string>;
+}
+
+interface InternalRequestConfig {
+  baseUrl: string;
+  defaultHeaders: Record<string, string>;
+  fetchImpl: FetchLike;
+}
+
+function buildUrl(
+  baseUrl: string,
+  path: string,
+  params?: Record<string, string>,
+): string {
+  let url = `${baseUrl}${path}`;
+  if (params && Object.keys(params).length > 0) {
+    const search = new URLSearchParams(params);
+    url = `${url}?${search.toString()}`;
+  }
+  return url;
+}
+
+async function parseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (text.length === 0) {
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+async function checkResponse(response: Response): Promise<void> {
+  if (response.status >= 200 && response.status < 300) {
+    return;
+  }
+  const body = await parseBody(response);
+  throw new VerixaHttpError(response.status, body, response.url);
+}
+
+async function requestJson<T = unknown>(
+  config: InternalRequestConfig,
+  opts: RequestOptions,
+): Promise<T> {
+  const url = buildUrl(config.baseUrl, opts.path, opts.params);
+  const init: RequestInit = {
+    method: opts.method,
+    headers: { ...config.defaultHeaders, ...(opts.headers ?? {}) },
+  };
+  if (opts.body !== undefined) {
+    init.body = JSON.stringify(opts.body);
+  }
+  let response: Response;
+  try {
+    response = await config.fetchImpl(url, init);
+  } catch (cause) {
+    throw new VerixaConnectionError(url, cause);
+  }
+  await checkResponse(response);
+  return (await parseBody(response)) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Resource clients
+// ---------------------------------------------------------------------------
+
+interface WorkflowRegisterArgs {
+  name: string;
+  ownerTenantId: string;
+  description?: string;
+}
+
+export class WorkflowsClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async register(args: WorkflowRegisterArgs): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'POST',
+      path: '/v1/control/workflows',
+      body: {
+        name: args.name,
+        owner_tenant_id: args.ownerTenantId,
+        description: args.description ?? null,
+      },
+    });
+  }
+
+  async list(): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'GET',
+      path: '/v1/control/workflows',
+    });
+  }
+}
+
+interface AgentRegisterArgs {
+  workflowId: string;
+  name: string;
+  modelProvider: string;
+  modelName: string;
+}
+
+export class AgentsClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async register(args: AgentRegisterArgs): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'POST',
+      path: '/v1/control/agents',
+      body: {
+        workflow_id: args.workflowId,
+        name: args.name,
+        model_provider: args.modelProvider,
+        model_name: args.modelName,
+      },
+    });
+  }
+}
+
+interface ToolRegisterArgs {
+  workflowId: string;
+  name: string;
+  schema: Record<string, unknown>;
+}
+
+export class ToolsClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async register(args: ToolRegisterArgs): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'POST',
+      path: '/v1/control/tools',
+      body: {
+        workflow_id: args.workflowId,
+        name: args.name,
+        schema: args.schema,
+      },
+    });
+  }
+}
+
+interface AuditQueryArgs {
+  workflowId: string;
+  /** ISO-8601 timestamp string. */
+  fromTimestamp: string;
+  /** ISO-8601 timestamp string. */
+  toTimestamp: string;
+}
+
+export class AuditClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async query(args: AuditQueryArgs): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'GET',
+      path: '/v1/control/audit',
+      params: {
+        workflow_id: args.workflowId,
+        from: args.fromTimestamp,
+        to: args.toTimestamp,
+      },
+    });
+  }
+}
+
+export class ReplayClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async get(args: { auditId: string }): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'POST',
+      path: '/v1/control/replay',
+      body: { audit_id: args.auditId },
+    });
+  }
+}
+
+interface DossierGenerateArgs {
+  auditId: string;
+  tenantId: string;
+}
+
+export class DossierClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async generate(args: DossierGenerateArgs): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'POST',
+      path: '/v1/control/dossier',
+      body: {
+        audit_id: args.auditId,
+        tenant_id: args.tenantId,
+      },
+    });
+  }
+
+  async get(dossierId: string): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'GET',
+      path: `/v1/control/dossier/${dossierId}`,
+    });
+  }
+}
+
+export class BundlesClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async list(): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'GET',
+      path: '/v1/control/policy/bundles',
+    });
+  }
+
+  /**
+   * Fetch a signed OPA bundle. Returns `{ body, etag }` on 200, or `null`
+   * on 304 cache-hit. Throws VerixaHttpError on 400/404/409/503.
+   */
+  async fetch(
+    name: string,
+    options?: { ifNoneMatch?: string },
+  ): Promise<{ body: Uint8Array; etag: string } | null> {
+    const url = buildUrl(
+      this.config.baseUrl,
+      `/v1/control/policy/bundles/${name}`,
+    );
+    const headers: Record<string, string> = { ...this.config.defaultHeaders };
+    if (options?.ifNoneMatch !== undefined) {
+      headers['If-None-Match'] = options.ifNoneMatch;
+    }
+    let response: Response;
+    try {
+      response = await this.config.fetchImpl(url, { method: 'GET', headers });
+    } catch (cause) {
+      throw new VerixaConnectionError(url, cause);
+    }
+    if (response.status === 304) {
+      return null;
+    }
+    await checkResponse(response);
+    const buf = await response.arrayBuffer();
+    return {
+      body: new Uint8Array(buf),
+      etag: response.headers.get('etag') ?? '',
+    };
+  }
+}
+
+interface WebhookSubscribeArgs {
+  tenantId: string;
+  url: string;
+  eventTypes: string[];
+  signingKeyId: string;
+}
+
+export class WebhooksClient {
+  constructor(private readonly config: InternalRequestConfig) {}
+
+  async subscribe(args: WebhookSubscribeArgs): Promise<unknown> {
+    return requestJson(this.config, {
+      method: 'POST',
+      path: '/v1/control/webhooks/subscriptions',
+      body: {
+        tenant_id: args.tenantId,
+        url: args.url,
+        event_types: args.eventTypes,
+        signing_key_id: args.signingKeyId,
+      },
+    });
+  }
+
+  async listSubscriptions(args?: {
+    tenantId?: string;
+  }): Promise<unknown> {
+    const params: Record<string, string> = {};
+    if (args?.tenantId !== undefined) {
+      params['tenant_id'] = args.tenantId;
+    }
+    return requestJson(this.config, {
+      method: 'GET',
+      path: '/v1/control/webhooks/subscriptions',
+      params,
+    });
+  }
+
+  async recentDeliveries(args?: { limit?: number }): Promise<unknown> {
+    const limit = args?.limit ?? 50;
+    return requestJson(this.config, {
+      method: 'GET',
+      path: '/v1/control/webhooks/deliveries',
+      params: { limit: String(limit) },
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Top-level VerixaClient
+// ---------------------------------------------------------------------------
+
+export interface VerixaClientOptions {
+  baseUrl: string;
+  apiKey?: string;
+  /** Inject a custom fetch for testing. Defaults to globalThis.fetch. */
+  fetchImpl?: FetchLike;
+}
+
+export class VerixaClient {
+  readonly workflows: WorkflowsClient;
+  readonly agents: AgentsClient;
+  readonly tools: ToolsClient;
+  readonly audit: AuditClient;
+  readonly replay: ReplayClient;
+  readonly dossier: DossierClient;
+  readonly bundles: BundlesClient;
+  readonly webhooks: WebhooksClient;
+
+  constructor(opts: VerixaClientOptions) {
+    if (!opts.baseUrl.startsWith('http://') && !opts.baseUrl.startsWith('https://')) {
+      throw new Error(
+        `baseUrl must start with http:// or https://; got ${opts.baseUrl}`,
+      );
+    }
+    const baseUrl = opts.baseUrl.replace(/\/+$/, '');
+    const defaultHeaders: Record<string, string> = {
+      'User-Agent': 'verixa-ts/0.1.0',
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    };
+    if (opts.apiKey !== undefined) {
+      defaultHeaders['Authorization'] = `Bearer ${opts.apiKey}`;
+    }
+    const fetchImpl: FetchLike = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    const config: InternalRequestConfig = { baseUrl, defaultHeaders, fetchImpl };
+    this.workflows = new WorkflowsClient(config);
+    this.agents = new AgentsClient(config);
+    this.tools = new ToolsClient(config);
+    this.audit = new AuditClient(config);
+    this.replay = new ReplayClient(config);
+    this.dossier = new DossierClient(config);
+    this.bundles = new BundlesClient(config);
+    this.webhooks = new WebhooksClient(config);
+  }
+}
