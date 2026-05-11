@@ -678,6 +678,9 @@ async def test_tools_register_return_typed_true_returns_dataclass() -> None:
 
 @pytest.mark.asyncio
 async def test_audit_query_sends_correct_query_params() -> None:
+    """CP-81 verified the server route uses Query(..., alias='from') +
+    Query(..., alias='to'); the wire keys ARE 'from' and 'to'. No
+    wire-format fix needed."""
     captured: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -695,6 +698,56 @@ async def test_audit_query_sends_correct_query_params() -> None:
     assert captured["params"]["workflow_id"] == str(_WORKFLOW)
     assert "2026-05-01" in captured["params"]["from"]
     assert "2026-05-11" in captured["params"]["to"]
+
+
+@pytest.mark.asyncio
+async def test_audit_query_return_typed_true_returns_dataclass() -> None:
+    """CP-81 opt-in: ``return_typed=True`` returns ``AuditQueryResponse``
+    with tuple-of-AuditEntry (immutable)."""
+    from verixa.envelopes import AuditEntry, AuditQueryResponse
+
+    audit_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "entries": [
+                    {
+                        "audit_id": str(audit_id),
+                        "workflow_id": str(_WORKFLOW),
+                        "decision": "allow",
+                        "risk_score": 0.12,
+                        "risk_classification": "low",
+                        "triad_invoked": False,
+                        "timestamp": "2026-05-11T22:00:00Z",
+                    },
+                ],
+                "total": 1,
+                "workflow_id": str(_WORKFLOW),
+                "from_timestamp": "2026-05-01T00:00:00Z",
+                "to_timestamp": "2026-05-11T00:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.audit.query(
+            workflow_id=_WORKFLOW,
+            from_timestamp=datetime(2026, 5, 1, 0, 0, 0, tzinfo=UTC),
+            to_timestamp=datetime(2026, 5, 11, 0, 0, 0, tzinfo=UTC),
+            return_typed=True,
+        )
+    assert isinstance(result, AuditQueryResponse)
+    assert result.total == 1
+    assert result.workflow_id == _WORKFLOW
+    assert len(result.entries) == 1
+    assert isinstance(result.entries[0], AuditEntry)
+    assert result.entries[0].audit_id == audit_id
+    assert result.entries[0].decision == "allow"
+    assert result.entries[0].triad_invoked is False
+    # Tuple-not-list immutability
+    assert isinstance(result.entries, tuple)
 
 
 @pytest.mark.asyncio

@@ -58,6 +58,7 @@ import httpx
 
 from verixa.envelopes import (
     AgentRegisterResponse,
+    AuditQueryResponse,
     DossierGenerateResponse,
     DossierGetResponse,
     ReplayResponse,
@@ -438,7 +439,36 @@ class ToolsClient(_SubClient):
 
 
 class AuditClient(_SubClient):
-    """Audit ledger query."""
+    """Audit ledger query.
+
+    CP-81 adds opt-in ``return_typed=True`` overload. The CP-50
+    request shape (``workflow_id`` + ``from`` + ``to`` query params)
+    is already correct: the server route at apps/control-plane-api
+    /.../routes.py uses Query(..., alias='from') + Query(...,
+    alias='to') so the wire keys ARE 'from' and 'to' on the URL
+    (mapped internally to from_timestamp/to_timestamp Python kwargs).
+    No wire-format fix needed.
+    """
+
+    @overload
+    async def query(
+        self,
+        *,
+        workflow_id: uuid.UUID,
+        from_timestamp: datetime,
+        to_timestamp: datetime,
+        return_typed: Literal[True],
+    ) -> AuditQueryResponse: ...
+
+    @overload
+    async def query(
+        self,
+        *,
+        workflow_id: uuid.UUID,
+        from_timestamp: datetime,
+        to_timestamp: datetime,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def query(
         self,
@@ -446,8 +476,18 @@ class AuditClient(_SubClient):
         workflow_id: uuid.UUID,
         from_timestamp: datetime,
         to_timestamp: datetime,
-    ) -> dict[str, Any]:
-        return await _request_json(
+        return_typed: bool = False,
+    ) -> dict[str, Any] | AuditQueryResponse:
+        """Query the audit ledger for entries in a workflow + time range.
+
+        Args:
+            workflow_id: filter by workflow.
+            from_timestamp: lower bound (TZ-aware datetime; ISO-8601 on wire).
+            to_timestamp: upper bound (TZ-aware datetime; ISO-8601 on wire).
+            return_typed: if True, returns ``AuditQueryResponse`` with
+                tuple-of-AuditEntry (immutable).
+        """
+        data = await _request_json(
             self._http,
             "GET",
             "/v1/control/audit",
@@ -457,6 +497,9 @@ class AuditClient(_SubClient):
                 "to": to_timestamp.isoformat(),
             },
         )
+        if return_typed:
+            return AuditQueryResponse.from_dict(data)
+        return data
 
 
 class ReplayClient(_SubClient):
