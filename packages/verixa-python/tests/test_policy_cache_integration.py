@@ -33,9 +33,9 @@ testcontainers = pytest.importorskip("testcontainers.redis")
 redis_asyncio = pytest.importorskip("redis.asyncio")
 RedisContainer = testcontainers.RedisContainer  # type: ignore[attr-defined]
 
-from verixa_runtime.policy import client as client_module
-from verixa_runtime.policy.cache import CachedPolicyClient, CacheStats
-from verixa_runtime.policy.client import (
+from verixa_runtime.policy import client as client_module  # noqa: E402
+from verixa_runtime.policy.cache import CachedPolicyClient, CacheStats  # noqa: E402
+from verixa_runtime.policy.client import (  # noqa: E402
     OpaPolicyClient,
     PolicyDecisionKind,
 )

@@ -38,7 +38,7 @@ class PolicyBundleError(ValueError):
 class PolicyTestExpected(str, Enum):
     """Expected outcome of a policy fixture (matches docs/09_data_model A7 4.2)."""
 
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
     ABSTAIN = "abstain"
 

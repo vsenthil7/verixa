@@ -51,7 +51,7 @@ class RiskClassification(str, Enum):
 class PolicyResult(str, Enum):
     """Per-policy evaluation outcome."""
 
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
     ABSTAIN = "abstain"
 

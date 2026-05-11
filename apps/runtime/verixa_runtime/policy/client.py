@@ -39,7 +39,7 @@ import httpx
 class PolicyDecisionKind(str, Enum):
     """Three-valued policy outcome (matches the Rego policies' decision field)."""
 
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105
     FAIL = "fail"
     ABSTAIN = "abstain"
 

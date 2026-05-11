@@ -222,9 +222,9 @@ def build_control_plane_router(state: ControlPlaneState) -> APIRouter:
 
     @router.get("/audit")
     async def audit_query(
-        workflow_id: uuid.UUID = Query(...),
-        from_timestamp: datetime = Query(..., alias="from"),
-        to_timestamp: datetime = Query(..., alias="to"),
+        workflow_id: uuid.UUID = Query(...),  # noqa: B008
+        from_timestamp: datetime = Query(..., alias="from"),  # noqa: B008
+        to_timestamp: datetime = Query(..., alias="to"),  # noqa: B008
     ) -> JSONResponse:
         return _to_json_response(
             await handle_audit_query(
