@@ -14,7 +14,8 @@ processed". The classes covered here:
   - Homoglyphs (Cyrillic 'a' vs Latin 'a', etc.) -- can defeat
     string-match policies
   - Surrogate halves -- invalid UTF-8 in JSON should be rejected at
-    parse time
+    parse time (pydantic strict mode rejects unpaired surrogates at
+    model_validate)
   - Null bytes embedded in strings -- some downstream parsers
     truncate at \\x00
 
@@ -41,9 +42,7 @@ from pydantic import ValidationError
 
 from verixa_runtime.gateway.envelopes import (
     AgentIdentity,
-    GovernAction,
     GovernContext,
-    GovernRequest,
     RetrievedDocument,
 )
 
@@ -170,28 +169,18 @@ def test_rtl_in_doc_id_preserved() -> None:
 
 def test_json_with_invalid_utf8_surrogate_rejected() -> None:
     """An attacker tries to land an envelope via JSON that contains
-    an unpaired surrogate half. json.loads must reject it before
-    pydantic even sees the dict; assert that round-tripping through
-    json fails."""
-    # Unpaired surrogate -- not valid in JSON either.
+    an unpaired surrogate half. Pydantic strict mode rejects unpaired
+    surrogates AT MODEL_VALIDATE TIME -- the safest possible boundary.
+    The attacker's payload never reaches downstream consumers.
+
+    This is STRONGER protection than catching the surrogate at the
+    seal layer -- pydantic refuses to even construct the model."""
     bad_json_bytes = b'{"spiffe_id": "spiffe://x", "role": "\\ud800", "workflow_id": "00000000-0000-0000-0000-000000000000"}'
     parsed = json.loads(bad_json_bytes.decode("utf-8"))
-    # Python's json.loads accepts the surrogate escape but pydantic
-    # strict-mode str rejects strings containing unpaired surrogates
-    # when re-encoding to UTF-8. The role field will contain the
-    # surrogate; we assert pydantic still constructs (it stores the
-    # string) but encoding to JSON bytes again raises. This is the
-    # actual safety boundary -- the bundle CANNOT be canonicalised
-    # if it contains an unpaired surrogate.
-    agent = AgentIdentity.model_validate(parsed)
-    # Re-serialising to JSON bytes raises UnicodeEncodeError because
-    # the role contains an unpaired surrogate. This is the protective
-    # behaviour: the bundle cannot be sealed if it carries a
-    # surrogate.
-    with pytest.raises(UnicodeEncodeError):
-        json.dumps(
-            {"role": agent.role}, ensure_ascii=False
-        ).encode("utf-8")
+    # Pydantic v2 strict-mode str rejects unpaired surrogates at the
+    # validate boundary with a string_unicode validation error.
+    with pytest.raises(ValidationError, match="string_unicode|unicode"):
+        AgentIdentity.model_validate(parsed)
 
 
 def test_oversized_unicode_in_reasoning_passes() -> None:
