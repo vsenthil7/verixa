@@ -31,13 +31,21 @@
  *     so 0/1/string cannot silently coerce; UUID-like string validation
  *     uses canonical RFC 4122 regex.
  *
- * Batch shipped in CP-65 (workflow + audit core; the rest follows in CP-66+):
+ * Subsets shipped:
  *
- *   - WorkflowRegisterResponse + parseWorkflowRegisterResponse
- *   - WorkflowSummary + parseWorkflowSummary
- *   - WorkflowListResponse + parseWorkflowListResponse
- *   - AuditEntry + parseAuditEntry
- *   - AuditQueryResponse + parseAuditQueryResponse
+ *   CP-65 (workflow + audit core; mirrors Python CP-61):
+ *     - WorkflowRegisterResponse + parseWorkflowRegisterResponse
+ *     - WorkflowSummary + parseWorkflowSummary
+ *     - WorkflowListResponse + parseWorkflowListResponse
+ *     - AuditEntry + parseAuditEntry
+ *     - AuditQueryResponse + parseAuditQueryResponse
+ *
+ *   CP-66 (registry: agent + tool; mirrors Python CP-62):
+ *     - AgentRegisterResponse + parseAgentRegisterResponse
+ *     - ToolRegisterResponse + parseToolRegisterResponse
+ *
+ * The remaining envelopes (Replay, Dossier, Webhook) follow in
+ * subsequent commits as the cross-language symmetry is built up.
  */
 
 // ---------------------------------------------------------------------------
@@ -194,6 +202,22 @@ function asBool(value: unknown, name: string): boolean {
     );
   }
   return value;
+}
+
+/**
+ * Parse an array of UUID strings into an immutable frozen array.
+ * Per-element validation with index-prefixed field name (e.g.
+ * `allowed_workflow_ids[1]`) for debuggability. Mirrors Python
+ * verixa.envelopes._as_uuid_list.
+ */
+function asUuidList(value: unknown, name: string): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new InvalidEnvelopeError(
+      `field ${name}: expected array of uuids, got ${typeof value}`,
+    );
+  }
+  const out: string[] = value.map((v, i) => asUuid(v, `${name}[${i}]`));
+  return Object.freeze(out);
 }
 
 // ---------------------------------------------------------------------------
@@ -402,6 +426,105 @@ export function parseAuditQueryResponse(
     toTimestamp: asDateTime(
       requireField(data, 'to_timestamp', 'to_timestamp'),
       'to_timestamp',
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Registry envelopes (CP-66; mirrors Python CP-62 -- agent + tool)
+// ---------------------------------------------------------------------------
+
+/**
+ * Server response to `POST /v1/control/agents`.
+ *
+ * Matches server-side AgentRegisterResponse: agent_id + workflow_id +
+ * spiffe_id + role + created_at. The agent is an operational entity
+ * acting under the workflow; spiffe_id is the SPIFFE identity
+ * (Phase-0 bypasses SPIFFE verification; the field is recorded for
+ * forward compatibility with the CP-53 mTLS Protocol surface).
+ */
+export interface AgentRegisterResponse {
+  readonly agentId: string;
+  readonly workflowId: string;
+  readonly spiffeId: string;
+  readonly role: string;
+  readonly createdAt: Date;
+}
+
+export function parseAgentRegisterResponse(
+  data: unknown,
+): AgentRegisterResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for AgentRegisterResponse, got ${typeof data}`,
+    );
+  }
+  return {
+    agentId: asUuid(
+      requireField(data, 'agent_id', 'agent_id'),
+      'agent_id',
+    ),
+    workflowId: asUuid(
+      requireField(data, 'workflow_id', 'workflow_id'),
+      'workflow_id',
+    ),
+    spiffeId: asString(
+      requireField(data, 'spiffe_id', 'spiffe_id'),
+      'spiffe_id',
+    ),
+    role: asString(requireField(data, 'role', 'role'), 'role'),
+    createdAt: asDateTime(
+      requireField(data, 'created_at', 'created_at'),
+      'created_at',
+    ),
+  };
+}
+
+/**
+ * Server response to `POST /v1/control/tools`.
+ *
+ * Matches server-side ToolRegisterResponse: tool_id + name + is_active
+ * + allowed_workflow_ids (empty array = any workflow; non-empty =
+ * restricted to those workflows) + created_at. The tool is something
+ * the agent may invoke subject to firewall + per-tenant ACL.
+ *
+ * allowedWorkflowIds is a frozen readonly array (immutable) so
+ * customers cannot mutate the parsed result.
+ */
+export interface ToolRegisterResponse {
+  readonly toolId: string;
+  readonly name: string;
+  readonly isActive: boolean;
+  readonly allowedWorkflowIds: readonly string[];
+  readonly createdAt: Date;
+}
+
+export function parseToolRegisterResponse(
+  data: unknown,
+): ToolRegisterResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for ToolRegisterResponse, got ${typeof data}`,
+    );
+  }
+  return {
+    toolId: asUuid(requireField(data, 'tool_id', 'tool_id'), 'tool_id'),
+    name: asString(requireField(data, 'name', 'name'), 'name'),
+    isActive: asBool(
+      requireField(data, 'is_active', 'is_active'),
+      'is_active',
+    ),
+    allowedWorkflowIds: asUuidList(
+      requireField(
+        data,
+        'allowed_workflow_ids',
+        'allowed_workflow_ids',
+      ),
+      'allowed_workflow_ids',
+    ),
+    createdAt: asDateTime(
+      requireField(data, 'created_at', 'created_at'),
+      'created_at',
     ),
   };
 }
