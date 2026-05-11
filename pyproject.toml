@@ -157,4 +157,8 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.:",
+    # CP-69: @overload stubs are type-checker-only declarations; the
+    # decorated stub body (`...`) is never executed at runtime, so
+    # coverage cannot reach those lines.
+    "@overload",
 ]

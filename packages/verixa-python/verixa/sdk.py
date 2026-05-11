@@ -39,9 +39,11 @@ Design choices:
   - **Pydantic models on the wire** -- request/response shapes mirror the
     envelopes module so type checkers + IDE autocomplete work end-to-end
   - **No retry on the alpha SDK** -- explicit caller control; Phase-1+ adds opt-in
-  - **Returns plain dicts for now** -- the envelope Pydantic models live
-    in the apps/control-plane-api package which customers don't install.
-    Phase-1+ extracts shared envelope models into this package
+  - **Returns plain dicts by default; opt-in typed envelopes** --
+    CP-61..CP-64 shipped ``verixa.envelopes`` dataclasses; CP-69
+    starts wiring them into the resource clients via
+    ``return_typed=True`` overloads (Workflows first; other clients
+    follow). v1.0.0 will flip the default to typed.
 """
 
 from __future__ import annotations
@@ -50,9 +52,14 @@ import uuid
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
 from types import TracebackType
-from typing import Any
+from typing import Any, Literal, overload
 
 import httpx
+
+from verixa.envelopes import (
+    WorkflowListResponse,
+    WorkflowRegisterResponse,
+)
 
 __all__ = [
     "AgentsClient",
@@ -171,30 +178,108 @@ class _SubClient:
 
 
 class WorkflowsClient(_SubClient):
-    """Workflow registration + listing."""
+    """Workflow registration + listing.
+
+    CP-69 corrects the CP-50 request-side wire-format bug
+    (``owner_tenant_id`` was rejected by the server's
+    ``extra='forbid'`` schema; tenant is inferred from auth context)
+    and adds opt-in ``return_typed=True`` overloads that return
+    typed envelope dataclasses instead of plain dicts. Default
+    behaviour is unchanged: ``dict[str, Any]`` is still returned
+    when ``return_typed`` is omitted or False. v1.0.0 will flip
+    the default per the v0.4.0 deprecation timeline.
+    """
+
+    # register() -- two @overload signatures (typed vs dict)
+    @overload
+    async def register(
+        self,
+        *,
+        name: str,
+        description: str = ...,
+        sector: str = ...,
+        risk_threshold_escalate: float = ...,
+        return_typed: Literal[True],
+    ) -> WorkflowRegisterResponse: ...
+
+    @overload
+    async def register(
+        self,
+        *,
+        name: str,
+        description: str = ...,
+        sector: str = ...,
+        risk_threshold_escalate: float = ...,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def register(
         self,
         *,
         name: str,
-        owner_tenant_id: uuid.UUID,
-        description: str | None = None,
-    ) -> dict[str, Any]:
-        return await _request_json(
+        description: str = "",
+        sector: str = "generic",
+        risk_threshold_escalate: float = 0.50,
+        return_typed: bool = False,
+    ) -> dict[str, Any] | WorkflowRegisterResponse:
+        """Register a new workflow under the calling tenant.
+
+        Args:
+            name: 1-200 chars, the human-readable workflow identifier.
+            description: free-text describing what the workflow does.
+            sector: industry tag (e.g. ``financial-services``,
+                ``healthcare``); defaults to ``generic``.
+            risk_threshold_escalate: float in [0, 1]; decisions above
+                this risk score escalate to triad review. Default 0.50.
+            return_typed: if True, returns a ``WorkflowRegisterResponse``
+                dataclass instead of a dict.
+
+        Returns:
+            ``dict[str, Any]`` by default, or ``WorkflowRegisterResponse``
+            if ``return_typed=True``.
+        """
+        data = await _request_json(
             self._http,
             "POST",
             "/v1/control/workflows",
             json={
                 "name": name,
-                "owner_tenant_id": str(owner_tenant_id),
                 "description": description,
+                "sector": sector,
+                "risk_threshold_escalate": risk_threshold_escalate,
             },
         )
+        if return_typed:
+            return WorkflowRegisterResponse.from_dict(data)
+        return data
 
-    async def list(self) -> dict[str, Any]:  # noqa: A003
-        return await _request_json(
+    # list() -- two @overload signatures (typed vs dict)
+    @overload
+    async def list(  # noqa: A003
+        self, *, return_typed: Literal[True]
+    ) -> WorkflowListResponse: ...
+
+    @overload
+    async def list(  # noqa: A003
+        self, *, return_typed: Literal[False] = ...
+    ) -> dict[str, Any]: ...
+
+    async def list(  # noqa: A003
+        self, *, return_typed: bool = False
+    ) -> dict[str, Any] | WorkflowListResponse:
+        """List workflows for the calling tenant.
+
+        Args:
+            return_typed: if True, returns ``WorkflowListResponse``
+                with a tuple of ``WorkflowSummary`` entries; otherwise
+                a plain dict (default).
+        """
+        data = await _request_json(
             self._http, "GET", "/v1/control/workflows"
         )
+        if return_typed:
+            return WorkflowListResponse.from_dict(data)
+        return data
 
 
 class AgentsClient(_SubClient):

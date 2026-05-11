@@ -248,6 +248,10 @@ async def test_aclose_closes_underlying_client() -> None:
 
 @pytest.mark.asyncio
 async def test_workflows_register_posts_correct_body() -> None:
+    """CP-69 corrects the CP-50 wire-format bug: server's strict
+    ``extra='forbid'`` schema rejected ``owner_tenant_id`` (tenant is
+    inferred from auth context). Server accepts name + description +
+    sector + risk_threshold_escalate."""
     captured: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -260,20 +264,110 @@ async def test_workflows_register_posts_correct_body() -> None:
             json={
                 "workflow_id": str(uuid.uuid4()),
                 "name": captured["body"]["name"],
+                "sector": captured["body"]["sector"],
+                "created_at": "2026-05-11T22:00:00Z",
             },
         )
 
     async with _make_client_with_handler(handler) as c:
         result = await c.workflows.register(
             name="payments",
-            owner_tenant_id=_TENANT,
-            description="test",
+            description="payments workflow",
+            sector="financial-services",
+            risk_threshold_escalate=0.65,
         )
     assert captured["method"] == "POST"
     assert captured["url"].endswith("/v1/control/workflows")
     assert captured["body"]["name"] == "payments"
-    assert captured["body"]["owner_tenant_id"] == str(_TENANT)
-    assert captured["body"]["description"] == "test"
+    assert captured["body"]["description"] == "payments workflow"
+    assert captured["body"]["sector"] == "financial-services"
+    assert captured["body"]["risk_threshold_escalate"] == 0.65
+    # CP-69 bug-fix: owner_tenant_id MUST NOT be sent (server rejects)
+    assert "owner_tenant_id" not in captured["body"]
+    assert result["name"] == "payments"
+
+
+@pytest.mark.asyncio
+async def test_workflows_register_uses_documented_defaults() -> None:
+    """Server defaults are ``description=""``, ``sector="generic"``,
+    ``risk_threshold_escalate=0.50``; the SDK MUST match those so
+    customers omitting the kwargs get a deterministic body."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "workflow_id": str(uuid.uuid4()),
+                "name": "x",
+                "sector": "generic",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        await c.workflows.register(name="x")
+    assert captured["body"]["description"] == ""
+    assert captured["body"]["sector"] == "generic"
+    assert captured["body"]["risk_threshold_escalate"] == 0.50
+
+
+@pytest.mark.asyncio
+async def test_workflows_register_return_typed_true_returns_dataclass() -> None:
+    """CP-69 opt-in: ``return_typed=True`` returns
+    ``WorkflowRegisterResponse`` dataclass (frozen, slots, typed)."""
+    from verixa.envelopes import WorkflowRegisterResponse
+
+    workflow_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "workflow_id": str(workflow_id),
+                "name": "payments",
+                "sector": "financial-services",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.workflows.register(
+            name="payments",
+            sector="financial-services",
+            return_typed=True,
+        )
+    assert isinstance(result, WorkflowRegisterResponse)
+    assert result.workflow_id == workflow_id
+    assert result.name == "payments"
+    assert result.sector == "financial-services"
+
+
+@pytest.mark.asyncio
+async def test_workflows_register_return_typed_false_returns_dict() -> None:
+    """Explicit ``return_typed=False`` returns ``dict[str, Any]``
+    (same as omitting the kwarg). Backwards-compatibility."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "workflow_id": str(uuid.uuid4()),
+                "name": "payments",
+                "sector": "generic",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.workflows.register(
+            name="payments",
+            return_typed=False,
+        )
+    assert isinstance(result, dict)
     assert result["name"] == "payments"
 
 
@@ -288,6 +382,64 @@ async def test_workflows_list_calls_get() -> None:
     async with _make_client_with_handler(handler) as c:
         result = await c.workflows.list()
     assert result == {"workflows": [], "total": 0}
+
+
+@pytest.mark.asyncio
+async def test_workflows_list_return_typed_true_returns_dataclass() -> None:
+    """CP-69 opt-in: ``return_typed=True`` returns
+    ``WorkflowListResponse`` with a tuple-of-``WorkflowSummary``."""
+    from verixa.envelopes import WorkflowListResponse, WorkflowSummary
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "workflows": [
+                    {
+                        "workflow_id": str(uuid.uuid4()),
+                        "name": "payments",
+                        "sector": "financial-services",
+                        "risk_threshold_escalate": 0.5,
+                        "agent_count": 3,
+                        "created_at": "2026-05-11T22:00:00Z",
+                    }
+                ],
+                "total": 1,
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.workflows.list(return_typed=True)
+    assert isinstance(result, WorkflowListResponse)
+    assert result.total == 1
+    assert len(result.workflows) == 1
+    assert isinstance(result.workflows[0], WorkflowSummary)
+    assert result.workflows[0].name == "payments"
+    # Tuple-not-list immutability
+    assert isinstance(result.workflows, tuple)
+
+
+@pytest.mark.asyncio
+async def test_workflows_list_return_typed_bubbles_envelope_error() -> None:
+    """If the server returns a malformed payload, the typed path
+    raises ``InvalidEnvelopeError`` instead of silently corrupting
+    state. The dict-path returns the raw dict."""
+    from verixa.envelopes import InvalidEnvelopeError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Missing the "total" field
+        return httpx.Response(
+            200, request=request, json={"workflows": []}
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        # Dict path: returns raw payload (no validation)
+        raw = await c.workflows.list()
+        assert raw == {"workflows": []}
+        # Typed path: raises with field name in message
+        with pytest.raises(InvalidEnvelopeError, match="field total"):
+            await c.workflows.list(return_typed=True)
 
 
 # ---------------------------------------------------------------------------
@@ -582,8 +734,6 @@ async def test_sdk_raises_http_error_on_400_with_typed_body() -> None:
 
     async with _make_client_with_handler(handler) as c:
         with pytest.raises(VerixaHttpError) as exc_info:
-            await c.workflows.register(
-                name="", owner_tenant_id=_TENANT
-            )
+            await c.workflows.register(name="")
     assert exc_info.value.status_code == 400
     assert exc_info.value.body["error"] == "invalid_request"
