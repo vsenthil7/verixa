@@ -139,40 +139,87 @@ def test_verify_rejects_middle_byte_flip(keypair: tuple[bytes, bytes]) -> None:
         verify(pub, _MSG, forged)
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-1 timing-attack tripwire: byte0 verification shows ~40x slower than last-byte verification on Windows-Python perf_counter_ns measurements; could be Python wrapping overhead, OS scheduler artifact on small samples, or a real timing channel. Marked xfail strict=False so the test runs and surfaces variance in CI without blocking. Phase 1 task: investigate with cryptolib-team analysis + larger sample sizes + dedicated benchmark harness; if false-positive, replace with finer-grained constant-time assertion; if real, escalate as security finding.")  # noqa: E501 -- intentional long-form Phase-1 investigation note
-def test_verify_byte0_vs_last_byte_timing_indistinguishable(
+def test_verify_byte0_vs_middle_byte_timing_indistinguishable(
     keypair: tuple[bytes, bytes],
 ) -> None:
-    """The KEY constant-time assertion.
+    """The KEY constant-time assertion (CP-52 corrected version).
 
-    Verification time when byte 0 is wrong MUST be statistically
-    indistinguishable from verification time when the last byte is
-    wrong. If they differ, the implementation has an early-exit
-    path that leaks information.
+    Verification time when byte 0 is forged MUST be statistically
+    indistinguishable from verification time when a middle byte is
+    forged. Both forgeries are structurally valid (pass libsodium's
+    pre-check) so they BOTH go through the full Ed25519 scalar
+    multiplication; if libsodium's verify were not constant-time
+    over them, an attacker measuring server timing could learn
+    structural information about valid signatures.
 
-    We assert the MEDIANS are within 5x of each other. This is a
-    very loose bound (real constant-time differs by ~1%, but the
-    test is noisy and we don't want flaky CI). A regression that
-    introduces a real timing leak typically differs by 10-100x,
-    which would catch.
+    Why byte 32 (bit 256) and not the LAST byte: bit 511 is bit 7 of
+    byte 63, the MSB of the "s" component. RFC 8032 sec 5.1.6 requires
+    the upper 3 bits of byte 63 to be zero, so flipping bit 511 produces
+    a structurally invalid signature that libsodium correctly rejects
+    in ~2 us WITHOUT running the scalar multiplication. This produces
+    a ~33x timing ratio versus byte0-forged that is NOT a security
+    leak (the structural constraint is public per the RFC) but DID
+    fool the original CP-36 byte0-vs-last test into reporting a false
+    alarm. CP-52 timing_benchmark harness investigated and confirmed.
+
+    Loose 5x bound here tolerates OS-scheduler noise on small samples;
+    real constant-time differs by ~1% (validated by the CP-52 harness
+    at N=10000 which reports Cliff's delta < 0.05 on this comparison).
     """
     priv, pub = keypair
     real_sig = sign(priv, _MSG)
     forged_byte0 = _flip_bit(real_sig, 0)
-    forged_last = _flip_bit(real_sig, len(real_sig) * 8 - 1)
+    forged_middle = _flip_bit(real_sig, 256)  # bit 0 of byte 32
 
     times_byte0 = _samples(verify, _N_SAMPLES, pub, _MSG, forged_byte0)
-    times_last = _samples(verify, _N_SAMPLES, pub, _MSG, forged_last)
+    times_middle = _samples(verify, _N_SAMPLES, pub, _MSG, forged_middle)
+
+    median_byte0 = statistics.median(times_byte0)
+    median_middle = statistics.median(times_middle)
+
+    ratio = max(median_byte0, median_middle) / min(median_byte0, median_middle)
+    assert ratio < 5.0, (
+        f"Possible timing leak: byte0={median_byte0}ns vs "
+        f"middle={median_middle}ns (ratio {ratio:.2f}). "
+        f"Run `python -m tools.timing_benchmark byte0-vs-middle --samples 10000` "
+        f"for definitive investigation."
+    )
+
+
+def test_verify_structurally_invalid_last_bit_fast_rejects(
+    keypair: tuple[bytes, bytes],
+) -> None:
+    """Documented expected behavior (CP-52 finding).
+
+    Flipping bit 511 of an Ed25519 signature sets the high bit of byte 63
+    which RFC 8032 sec 5.1.6 mandates must be zero. libsodium correctly
+    detects this as structurally invalid and fast-rejects WITHOUT running
+    the scalar multiplication. This produces a timing difference vs a
+    structurally-valid forgery, but does NOT leak any secret material --
+    the constraint is a public RFC requirement.
+
+    This test PINS the fast-reject behavior so we notice if a future
+    libsodium update removes it (which would make rejections slightly
+    slower but would not be a security regression).
+    """
+    priv, pub = keypair
+    real_sig = sign(priv, _MSG)
+    forged_byte0 = _flip_bit(real_sig, 0)
+    forged_last_bit = _flip_bit(real_sig, len(real_sig) * 8 - 1)
+
+    times_byte0 = _samples(verify, _N_SAMPLES, pub, _MSG, forged_byte0)
+    times_last = _samples(verify, _N_SAMPLES, pub, _MSG, forged_last_bit)
 
     median_byte0 = statistics.median(times_byte0)
     median_last = statistics.median(times_last)
 
-    # The constant-time assertion: medians within 20x  # noqa: E501
-    # (loose to tolerate OS-scheduler noise on small samples).
-    ratio = max(median_byte0, median_last) / min(median_byte0, median_last)
-    assert ratio < 20.0, (
-        f"Possible timing leak: byte0={median_byte0}ns vs "
-        f"last={median_last}ns (ratio {ratio:.2f})"
+    # Document: last-bit forgery is FASTER (fast-reject path).
+    # If this ratio drops below 5, libsodium removed the fast-reject;
+    # not a security issue but worth knowing.
+    assert median_last < median_byte0, (
+        f"Expected last-bit forgery to fast-reject faster than "
+        f"byte0 forgery (CP-52 documented behavior): "
+        f"byte0={median_byte0}ns vs last={median_last}ns"
     )
 
 
@@ -230,14 +277,20 @@ def test_verify_rejects_all_ones_signature(keypair: tuple[bytes, bytes]) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-1 timing-attack tripwire companion to byte0-vs-last test above; same investigation.")  # noqa: E501 -- intentional long-form Phase-1 investigation note
 def test_verify_wrong_key_vs_wrong_sig_timing(keypair: tuple[bytes, bytes]) -> None:
     """Verifying a real signature with a WRONG public key takes ~the same
     time as verifying a forged signature with the right public key.
 
     This catches a different timing leak: an implementation that tells
     you "you have the wrong key" faster than "you have the wrong
-    signature" would leak whether the key matters."""
+    signature" would leak whether the key matters.
+
+    CP-52 update: investigated with timing_benchmark at N=2000+ and
+    confirmed no leak (Cliff's delta ~ 0.16, well below threshold).
+    The original xfail was small-N (N=100) measurement noise; with
+    pytest's tight wall-clock budget we keep N=100 here and use a
+    loose 5x bound (vs the previous 20x); for definitive verification
+    use the harness."""
     priv, pub = keypair
     real_sig = sign(priv, _MSG)
     forged = _flip_bit(real_sig, 0)
@@ -251,9 +304,11 @@ def test_verify_wrong_key_vs_wrong_sig_timing(keypair: tuple[bytes, bytes]) -> N
     median_ws = statistics.median(times_wrong_sig)
 
     ratio = max(median_wk, median_ws) / min(median_wk, median_ws)
-    assert ratio < 20.0, (
+    assert ratio < 5.0, (
         f"Possible timing leak: wrong-key={median_wk}ns vs "
-        f"wrong-sig={median_ws}ns (ratio {ratio:.2f})"
+        f"wrong-sig={median_ws}ns (ratio {ratio:.2f}). "
+        f"Run `python -m tools.timing_benchmark wrong-key-vs-wrong-sig "
+        f"--samples 10000` for definitive investigation."
     )
 
 
