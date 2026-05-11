@@ -1,0 +1,64 @@
+# NOTICE — Third-party software acknowledgements
+
+Verixa is licensed under the MIT License (see [`LICENSE`](LICENSE)).
+
+This product **includes and depends on** third-party open-source software. Each component is licensed under its own terms. A complete, machine-generated inventory with versions and license types is in [`docs/SBOM.md`](docs/SBOM.md).
+
+This NOTICE file aggregates required attribution for those dependencies. If you redistribute Verixa or a derivative, please retain this file and the SBOM alongside.
+
+---
+
+## Cryptographic primitives
+
+Verixa's signing and sealing operations rely on:
+
+- **PyNaCl** — Python binding to `libsodium`. Licensed under **Apache-2.0**. Copyright (c) The PyNaCl developers. Source: <https://github.com/pyca/pynacl>
+- **libsodium** — bundled by PyNaCl. Licensed under **ISC**. Copyright (c) Frank Denis. Source: <https://github.com/jedisct1/libsodium>
+- **cryptography** (pyca/cryptography) — Licensed under **Apache-2.0 OR BSD-3-Clause** (dual). Copyright (c) Individual contributors. Source: <https://github.com/pyca/cryptography>
+
+These three projects implement every cryptographic operation in Verixa. We rely on their security guarantees; Verixa does not implement custom cryptography. See [ADR-0004](docs/07_system_architecture/adr/ADR-0004-ed25519-over-rsa-for-dossier-signing.md).
+
+## Web framework
+
+- **FastAPI** — Licensed under **MIT**. Copyright (c) Sebastián Ramírez. Source: <https://github.com/tiangolo/fastapi>
+- **Starlette** — Licensed under **BSD-3-Clause**. Copyright (c) Encode OSS Ltd. Source: <https://github.com/encode/starlette>
+- **Uvicorn** — Licensed under **BSD-3-Clause**. Copyright (c) Encode OSS Ltd. Source: <https://github.com/encode/uvicorn>
+- **Pydantic** — Licensed under **MIT**. Copyright (c) Samuel Colvin and contributors. Source: <https://github.com/pydantic/pydantic>
+
+## Policy engine
+
+- **Open Policy Agent (OPA)** — Licensed under **Apache-2.0**. Copyright (c) The OPA Authors. Source: <https://github.com/open-policy-agent/opa>
+
+Verixa does not bundle OPA; it talks to OPA over HTTP. Phase 0 uses an embedded Rego evaluator via the OPA Python wrapper.
+
+## Frontend
+
+- **Next.js** — Licensed under **MIT**. Copyright (c) 2025 Vercel, Inc. Source: <https://github.com/vercel/next.js>
+- **React** — Licensed under **MIT**. Copyright (c) Meta Platforms, Inc. and affiliates. Source: <https://github.com/facebook/react>
+- **Tailwind CSS** — Licensed under **MIT**. Copyright (c) Tailwind Labs, Inc. Source: <https://github.com/tailwindlabs/tailwindcss>
+- **shadcn/ui** — Licensed under **MIT**. Copyright (c) shadcn. Source: <https://github.com/shadcn/ui>
+
+## Testing
+
+- **pytest** — Licensed under **MIT**. Source: <https://github.com/pytest-dev/pytest>
+- **Playwright** — Licensed under **Apache-2.0**. Copyright (c) Microsoft Corporation. Source: <https://github.com/microsoft/playwright>
+- **Vitest** — Licensed under **MIT**. Copyright (c) Vitest team. Source: <https://github.com/vitest-dev/vitest>
+
+## AI / inference
+
+- **vLLM** — Licensed under **Apache-2.0**. Source: <https://github.com/vllm-project/vllm>
+- **Qwen3** model weights (used for reviewer triad) — released by Alibaba Cloud under the Tongyi Qianwen License Agreement. See <https://huggingface.co/Qwen> for the exact terms of the variant in use.
+
+## Full inventory
+
+[`docs/SBOM.md`](docs/SBOM.md) carries the complete machine-readable inventory of every direct dependency across both Python and Node ecosystems, with licence and source URL for each.
+
+For transitive dependencies and CycloneDX-format SBOM, see Phase 1.
+
+---
+
+## Statement on attribution completeness
+
+This NOTICE file lists the named third-party dependencies that contribute substantially to Verixa's runtime or build. The SBOM lists every direct dependency. **Transitive dependencies are not individually listed here**; they appear by package name in the SBOM and inherit attribution from their respective package metadata.
+
+If you believe a project we depend on is not appropriately credited here, please open an issue at <https://github.com/v-sen/verixa/issues>.
