@@ -58,6 +58,8 @@ import httpx
 
 from verixa.envelopes import (
     AgentRegisterResponse,
+    DossierGenerateResponse,
+    DossierGetResponse,
     ToolRegisterResponse,
     WorkflowListResponse,
     WorkflowRegisterResponse,
@@ -468,29 +470,93 @@ class ReplayClient(_SubClient):
 
 
 class DossierClient(_SubClient):
-    """Compliance dossier generation + retrieval."""
+    """Compliance dossier generation + retrieval.
+
+    CP-75 corrects the CP-50 wire-format bug on generate(): server's
+    ``DossierGenerateRequest`` accepts ``audit_id + action_summary``
+    (default empty, max 2000 chars); the CP-50 SDK sent
+    ``audit_id + tenant_id`` which the strict ``extra='forbid'``
+    schema rejects. Tenant is inferred from auth context, same as
+    workflow registration. action_summary is the auditor-readable
+    summary of the action the dossier covers; empty defaults to a
+    system-generated summary.
+    """
+
+    @overload
+    async def generate(
+        self,
+        *,
+        audit_id: uuid.UUID,
+        action_summary: str = ...,
+        return_typed: Literal[True],
+    ) -> DossierGenerateResponse: ...
+
+    @overload
+    async def generate(
+        self,
+        *,
+        audit_id: uuid.UUID,
+        action_summary: str = ...,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def generate(
-        self, *, audit_id: uuid.UUID, tenant_id: uuid.UUID
-    ) -> dict[str, Any]:
-        return await _request_json(
+        self,
+        *,
+        audit_id: uuid.UUID,
+        action_summary: str = "",
+        return_typed: bool = False,
+    ) -> dict[str, Any] | DossierGenerateResponse:
+        """Generate a dossier for a previously-decided audit_id.
+
+        Args:
+            audit_id: the audit ID to generate a dossier for.
+            action_summary: auditor-readable summary; defaults to empty
+                (server generates default summary). Max 2000 chars.
+            return_typed: if True, returns ``DossierGenerateResponse``.
+        """
+        data = await _request_json(
             self._http,
             "POST",
             "/v1/control/dossier",
             json={
                 "audit_id": str(audit_id),
-                "tenant_id": str(tenant_id),
+                "action_summary": action_summary,
             },
         )
+        if return_typed:
+            return DossierGenerateResponse.from_dict(data)
+        return data
+
+    @overload
+    async def get(
+        self, dossier_id: uuid.UUID, *, return_typed: Literal[True]
+    ) -> DossierGetResponse: ...
+
+    @overload
+    async def get(
+        self, dossier_id: uuid.UUID, *, return_typed: Literal[False] = ...
+    ) -> dict[str, Any]: ...
 
     async def get(
-        self, dossier_id: uuid.UUID
-    ) -> dict[str, Any]:
-        return await _request_json(
+        self, dossier_id: uuid.UUID, *, return_typed: bool = False
+    ) -> dict[str, Any] | DossierGetResponse:
+        """Fetch a previously-generated dossier by id.
+
+        Args:
+            dossier_id: the dossier ID returned by generate().
+            return_typed: if True, returns ``DossierGetResponse`` with
+                length-validated signature_hex (128 hex) + public_key_hex
+                (64 hex).
+        """
+        data = await _request_json(
             self._http,
             "GET",
             f"/v1/control/dossier/{dossier_id}",
         )
+        if return_typed:
+            return DossierGetResponse.from_dict(data)
+        return data
 
 
 class BundlesClient(_SubClient):

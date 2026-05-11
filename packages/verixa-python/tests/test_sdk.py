@@ -714,7 +714,11 @@ async def test_replay_get_posts_audit_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dossier_generate_posts_audit_and_tenant() -> None:
+async def test_dossier_generate_posts_correct_body() -> None:
+    """CP-75 corrects the CP-50 wire-format bug: server's
+    ``DossierGenerateRequest`` accepts ``audit_id + action_summary``;
+    the CP-50 SDK sent ``audit_id + tenant_id`` which the strict
+    ``extra='forbid'`` schema rejects (tenant inferred from auth)."""
     audit_id = uuid.uuid4()
     captured: dict[str, Any] = {}
 
@@ -723,13 +727,79 @@ async def test_dossier_generate_posts_audit_and_tenant() -> None:
         return httpx.Response(
             201,
             request=request,
-            json={"dossier_id": str(uuid.uuid4())},
+            json={
+                "dossier_id": str(uuid.uuid4()),
+                "audit_id": str(audit_id),
+                "signing_key_id": "verixa-sig-dev",
+                "generated_at": "2026-05-11T22:00:00Z",
+            },
         )
 
     async with _make_client_with_handler(handler) as c:
-        await c.dossier.generate(audit_id=audit_id, tenant_id=_TENANT)
+        await c.dossier.generate(
+            audit_id=audit_id,
+            action_summary="customer approved payment of $5000",
+        )
     assert captured["body"]["audit_id"] == str(audit_id)
-    assert captured["body"]["tenant_id"] == str(_TENANT)
+    assert captured["body"]["action_summary"] == "customer approved payment of $5000"
+    # CP-75 bug-fix: tenant_id MUST NOT be sent (server rejects)
+    assert "tenant_id" not in captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_dossier_generate_defaults_action_summary_empty() -> None:
+    """Server default for action_summary is empty string (triggers
+    system-generated summary). SDK MUST match."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "dossier_id": str(uuid.uuid4()),
+                "audit_id": str(uuid.uuid4()),
+                "signing_key_id": "verixa-sig-dev",
+                "generated_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        await c.dossier.generate(audit_id=uuid.uuid4())
+    assert captured["body"]["action_summary"] == ""
+
+
+@pytest.mark.asyncio
+async def test_dossier_generate_return_typed_true_returns_dataclass() -> None:
+    """CP-75 opt-in: ``return_typed=True`` returns
+    ``DossierGenerateResponse`` dataclass."""
+    from verixa.envelopes import DossierGenerateResponse
+
+    dossier_id = uuid.uuid4()
+    audit_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "dossier_id": str(dossier_id),
+                "audit_id": str(audit_id),
+                "signing_key_id": "verixa-sig-prod-acme",
+                "generated_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.dossier.generate(
+            audit_id=audit_id,
+            return_typed=True,
+        )
+    assert isinstance(result, DossierGenerateResponse)
+    assert result.dossier_id == dossier_id
+    assert result.audit_id == audit_id
+    assert result.signing_key_id == "verixa-sig-prod-acme"
 
 
 @pytest.mark.asyncio
@@ -748,6 +818,40 @@ async def test_dossier_get_calls_with_id_in_path() -> None:
     async with _make_client_with_handler(handler) as c:
         await c.dossier.get(dossier_id)
     assert captured["path"] == f"/v1/control/dossier/{dossier_id}"
+
+
+@pytest.mark.asyncio
+async def test_dossier_get_return_typed_true_returns_dataclass() -> None:
+    """CP-75 opt-in: ``return_typed=True`` returns
+    ``DossierGetResponse`` with length-validated signature_hex (128 hex
+    = 64 bytes Ed25519 sig) + public_key_hex (64 hex = 32 bytes Ed25519
+    public key)."""
+    from verixa.envelopes import DossierGetResponse
+
+    dossier_id = uuid.uuid4()
+    audit_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "dossier_id": str(dossier_id),
+                "audit_id": str(audit_id),
+                "manifest": {"summary": "approved payment"},
+                "signature_hex": "a" * 128,
+                "public_key_hex": "b" * 64,
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.dossier.get(dossier_id, return_typed=True)
+    assert isinstance(result, DossierGetResponse)
+    assert result.dossier_id == dossier_id
+    assert result.audit_id == audit_id
+    assert result.manifest == {"summary": "approved payment"}
+    assert len(result.signature_hex) == 128
+    assert len(result.public_key_hex) == 64
 
 
 # ---------------------------------------------------------------------------
