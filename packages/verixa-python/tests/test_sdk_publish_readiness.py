@@ -181,7 +181,11 @@ def test_all_lists_match_advertised_symbols() -> None:
     CP-61 added 6 envelope dataclass exports;
     CP-62 added 2 more (AgentRegisterResponse + ToolRegisterResponse);
     CP-63 added 3 more (ReplayResponse + DossierGenerateResponse +
-    DossierGetResponse) -- total 23 symbols."""
+    DossierGetResponse);
+    CP-64 added 4 more (WebhookSubscriptionSummary +
+    WebhookSubscriptionListResponse + WebhookDeliverySummary +
+    WebhookDeliveryListResponse) -- COMPLETES the typed-response
+    surface at 27 symbols total (12 SDK + 15 envelope)."""
     import verixa
 
     expected = {
@@ -212,6 +216,11 @@ def test_all_lists_match_advertised_symbols() -> None:
         "ReplayResponse",
         "DossierGenerateResponse",
         "DossierGetResponse",
+        # Typed envelope dataclasses (4 more) added by CP-64 -- completes set
+        "WebhookSubscriptionSummary",
+        "WebhookSubscriptionListResponse",
+        "WebhookDeliverySummary",
+        "WebhookDeliveryListResponse",
     }
     assert set(verixa.__all__) == expected
 

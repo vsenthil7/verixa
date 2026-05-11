@@ -45,8 +45,13 @@ Subset shipped:
     - ReplayResponse
     - DossierGenerateResponse + DossierGetResponse
 
-The remaining envelopes (Webhook subscription + delivery summaries)
-follow in subsequent commits as the type signatures land.
+  CP-64 (webhook -- completes the typed-response surface):
+    - WebhookSubscriptionSummary + WebhookSubscriptionListResponse
+    - WebhookDeliverySummary + WebhookDeliveryListResponse
+
+The full server-side response envelope set is now mirrored here. The
+next round of SDK work (Phase-1+) wires opt-in return_typed=True flags
+on each resource client method per the v0.2.0 deprecation timeline.
 """
 
 from __future__ import annotations
@@ -708,6 +713,199 @@ class DossierGetResponse:
         )
 
 
+# ---------------------------------------------------------------------------
+# Webhook envelopes (CP-64) -- completes the typed-response surface
+# ---------------------------------------------------------------------------
+
+
+def _as_str_list(value: Any, name: str) -> tuple[str, ...]:
+    """Parse a list-of-strings into an immutable tuple-of-strings."""
+    if not isinstance(value, list):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected list of strings, "
+            f"got {type(value).__name__}"
+        )
+    out: list[str] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, str):
+            raise InvalidEnvelopeError(
+                f"field {name}[{i}]: expected string, "
+                f"got {type(item).__name__}"
+            )
+        out.append(item)
+    return tuple(out)
+
+
+def _as_optional_str(value: Any, name: str) -> str | None:
+    if value is None:
+        return None
+    return _as_str(value, name)
+
+
+@dataclass(frozen=True, slots=True)
+class WebhookSubscriptionSummary:
+    """One subscription as returned by ``GET /v1/control/webhooks/subscriptions``.
+
+    Matches server-side WebhookSubscriptionSummary: subscription_id +
+    tenant_id + url + event_types + signing_key_id + created_at.
+    event_types is a tuple of strings (immutable; e.g. {decision.recorded,
+    dossier.generated, replay.requested}). signing_key_id is the
+    Vault-tracked key the dispatcher uses to Ed25519-sign deliveries
+    (per webhook receiver verification protocol).
+    """
+
+    subscription_id: uuid.UUID
+    tenant_id: uuid.UUID
+    url: str
+    event_types: tuple[str, ...]
+    signing_key_id: str
+    created_at: datetime
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WebhookSubscriptionSummary:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for WebhookSubscriptionSummary, "
+                f"got {type(data).__name__}"
+            )
+        return cls(
+            subscription_id=_as_uuid(
+                _require(data, "subscription_id", "subscription_id"),
+                "subscription_id",
+            ),
+            tenant_id=_as_uuid(
+                _require(data, "tenant_id", "tenant_id"), "tenant_id"
+            ),
+            url=_as_str(_require(data, "url", "url"), "url"),
+            event_types=_as_str_list(
+                _require(data, "event_types", "event_types"), "event_types"
+            ),
+            signing_key_id=_as_str(
+                _require(data, "signing_key_id", "signing_key_id"),
+                "signing_key_id",
+            ),
+            created_at=_as_datetime(
+                _require(data, "created_at", "created_at"), "created_at"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WebhookSubscriptionListResponse:
+    """Server response to ``GET /v1/control/webhooks/subscriptions``."""
+
+    subscriptions: tuple[WebhookSubscriptionSummary, ...]
+    total: int
+
+    @classmethod
+    def from_dict(
+        cls, data: dict[str, Any]
+    ) -> WebhookSubscriptionListResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for WebhookSubscriptionListResponse, "
+                f"got {type(data).__name__}"
+            )
+        items = _require(data, "subscriptions", "subscriptions")
+        if not isinstance(items, list):
+            raise InvalidEnvelopeError(
+                f"field subscriptions: expected list, "
+                f"got {type(items).__name__}"
+            )
+        parsed = tuple(
+            WebhookSubscriptionSummary.from_dict(item) for item in items
+        )
+        return cls(
+            subscriptions=parsed,
+            total=_as_int(_require(data, "total", "total"), "total"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WebhookDeliverySummary:
+    """One forensic delivery record from ``GET /v1/control/webhooks/deliveries``.
+
+    Matches server-side WebhookDeliverySummary: attempt_id +
+    subscription_id + event_id + url + status_code + latency_ms +
+    attempted_at + optional error. error is None on successful
+    delivery (2xx response); on failure it carries the exception
+    description (e.g. 'connection refused', 'timeout after 5s',
+    'HTTP 500').
+    """
+
+    attempt_id: uuid.UUID
+    subscription_id: uuid.UUID
+    event_id: uuid.UUID
+    url: str
+    status_code: int
+    latency_ms: int
+    attempted_at: datetime
+    error: str | None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> WebhookDeliverySummary:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for WebhookDeliverySummary, "
+                f"got {type(data).__name__}"
+            )
+        return cls(
+            attempt_id=_as_uuid(
+                _require(data, "attempt_id", "attempt_id"), "attempt_id"
+            ),
+            subscription_id=_as_uuid(
+                _require(data, "subscription_id", "subscription_id"),
+                "subscription_id",
+            ),
+            event_id=_as_uuid(
+                _require(data, "event_id", "event_id"), "event_id"
+            ),
+            url=_as_str(_require(data, "url", "url"), "url"),
+            status_code=_as_int(
+                _require(data, "status_code", "status_code"), "status_code"
+            ),
+            latency_ms=_as_int(
+                _require(data, "latency_ms", "latency_ms"), "latency_ms"
+            ),
+            attempted_at=_as_datetime(
+                _require(data, "attempted_at", "attempted_at"),
+                "attempted_at",
+            ),
+            error=_as_optional_str(data.get("error"), "error"),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class WebhookDeliveryListResponse:
+    """Server response to ``GET /v1/control/webhooks/deliveries``."""
+
+    deliveries: tuple[WebhookDeliverySummary, ...]
+    total: int
+
+    @classmethod
+    def from_dict(
+        cls, data: dict[str, Any]
+    ) -> WebhookDeliveryListResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for WebhookDeliveryListResponse, "
+                f"got {type(data).__name__}"
+            )
+        items = _require(data, "deliveries", "deliveries")
+        if not isinstance(items, list):
+            raise InvalidEnvelopeError(
+                f"field deliveries: expected list, "
+                f"got {type(items).__name__}"
+            )
+        parsed = tuple(
+            WebhookDeliverySummary.from_dict(item) for item in items
+        )
+        return cls(
+            deliveries=parsed,
+            total=_as_int(_require(data, "total", "total"), "total"),
+        )
+
+
 __all__ = [
     "AgentRegisterResponse",
     "AuditEntry",
@@ -717,6 +915,10 @@ __all__ = [
     "InvalidEnvelopeError",
     "ReplayResponse",
     "ToolRegisterResponse",
+    "WebhookDeliveryListResponse",
+    "WebhookDeliverySummary",
+    "WebhookSubscriptionListResponse",
+    "WebhookSubscriptionSummary",
     "WorkflowListResponse",
     "WorkflowRegisterResponse",
     "WorkflowSummary",

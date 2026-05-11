@@ -11,6 +11,8 @@ Public SDK surface (re-exported from sdk.py for ergonomic imports):
 Typed response envelopes (re-exported from envelopes.py):
 
     from verixa import WorkflowRegisterResponse, AuditEntry, ...
+
+The full server-side response envelope set is mirrored as of CP-64.
 """
 
 __version__ = "0.1.0"
@@ -26,6 +28,10 @@ from verixa.envelopes import (
     InvalidEnvelopeError,
     ReplayResponse,
     ToolRegisterResponse,
+    WebhookDeliveryListResponse,
+    WebhookDeliverySummary,
+    WebhookSubscriptionListResponse,
+    WebhookSubscriptionSummary,
     WorkflowListResponse,
     WorkflowRegisterResponse,
     WorkflowSummary,
@@ -64,6 +70,10 @@ __all__ = [
     "VerixaConnectionError",
     "VerixaError",
     "VerixaHttpError",
+    "WebhookDeliveryListResponse",
+    "WebhookDeliverySummary",
+    "WebhookSubscriptionListResponse",
+    "WebhookSubscriptionSummary",
     "WebhooksClient",
     "WorkflowListResponse",
     "WorkflowRegisterResponse",
