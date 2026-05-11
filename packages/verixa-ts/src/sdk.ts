@@ -4,6 +4,9 @@ import {
   type DossierGetResponse,
   type ReplayResponse,
   type ToolRegisterResponse,
+  type WebhookDeliveryListResponse,
+  type WebhookSubscriptionListResponse,
+  type WebhookSubscriptionSummary,
   type WorkflowListResponse,
   type WorkflowRegisterResponse,
   parseAgentRegisterResponse,
@@ -11,6 +14,9 @@ import {
   parseDossierGetResponse,
   parseReplayResponse,
   parseToolRegisterResponse,
+  parseWebhookDeliveryListResponse,
+  parseWebhookSubscriptionListResponse,
+  parseWebhookSubscriptionSummary,
   parseWorkflowListResponse,
   parseWorkflowRegisterResponse,
 } from './envelopes.js';
@@ -484,6 +490,11 @@ export class BundlesClient {
   }
 }
 
+/**
+ * CP-80: kwargs for WebhooksClient methods. Request shapes were
+ * already correct in CP-51; this CP adds opt-in returnTyped
+ * overloads mirroring Python CP-79.
+ */
 interface WebhookSubscribeArgs {
   tenantId: string;
   url: string;
@@ -494,8 +505,17 @@ interface WebhookSubscribeArgs {
 export class WebhooksClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async subscribe(args: WebhookSubscribeArgs): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-80 subscribe() overloads.
+  async subscribe(
+    args: WebhookSubscribeArgs & { returnTyped: true },
+  ): Promise<WebhookSubscriptionSummary>;
+  async subscribe(
+    args: WebhookSubscribeArgs & { returnTyped?: false },
+  ): Promise<unknown>;
+  async subscribe(
+    args: WebhookSubscribeArgs & { returnTyped?: boolean },
+  ): Promise<unknown | WebhookSubscriptionSummary> {
+    const data = await requestJson(this.config, {
       method: 'POST',
       path: '/v1/control/webhooks/subscriptions',
       body: {
@@ -505,29 +525,57 @@ export class WebhooksClient {
         signing_key_id: args.signingKeyId,
       },
     });
+    if (args.returnTyped === true) {
+      return parseWebhookSubscriptionSummary(data);
+    }
+    return data;
   }
 
-  async listSubscriptions(args?: {
-    tenantId?: string;
-  }): Promise<unknown> {
+  // CP-80 listSubscriptions() overloads.
+  async listSubscriptions(
+    args: { tenantId?: string; returnTyped: true },
+  ): Promise<WebhookSubscriptionListResponse>;
+  async listSubscriptions(
+    args?: { tenantId?: string; returnTyped?: false },
+  ): Promise<unknown>;
+  async listSubscriptions(
+    args?: { tenantId?: string; returnTyped?: boolean },
+  ): Promise<unknown | WebhookSubscriptionListResponse> {
     const params: Record<string, string> = {};
     if (args?.tenantId !== undefined) {
       params['tenant_id'] = args.tenantId;
     }
-    return requestJson(this.config, {
+    const data = await requestJson(this.config, {
       method: 'GET',
       path: '/v1/control/webhooks/subscriptions',
       params,
     });
+    if (args?.returnTyped === true) {
+      return parseWebhookSubscriptionListResponse(data);
+    }
+    return data;
   }
 
-  async recentDeliveries(args?: { limit?: number }): Promise<unknown> {
+  // CP-80 recentDeliveries() overloads.
+  async recentDeliveries(
+    args: { limit?: number; returnTyped: true },
+  ): Promise<WebhookDeliveryListResponse>;
+  async recentDeliveries(
+    args?: { limit?: number; returnTyped?: false },
+  ): Promise<unknown>;
+  async recentDeliveries(
+    args?: { limit?: number; returnTyped?: boolean },
+  ): Promise<unknown | WebhookDeliveryListResponse> {
     const limit = args?.limit ?? 50;
-    return requestJson(this.config, {
+    const data = await requestJson(this.config, {
       method: 'GET',
       path: '/v1/control/webhooks/deliveries',
       params: { limit: String(limit) },
     });
+    if (args?.returnTyped === true) {
+      return parseWebhookDeliveryListResponse(data);
+    }
+    return data;
   }
 }
 

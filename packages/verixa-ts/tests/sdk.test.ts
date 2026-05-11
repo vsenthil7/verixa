@@ -888,4 +888,82 @@ describe('webhooks', () => {
     await client.webhooks.recentDeliveries({ limit: 250 });
     expect(captured[0]?.url).toContain('limit=250');
   });
+
+  it('subscribe with returnTyped:true returns WebhookSubscriptionSummary', async () => {
+    // CP-80 opt-in: typed return mirrors Python CP-79.
+    const subscriptionId = '00000000-0000-0000-0000-0000000000dd';
+    const { client } = makeClient({
+      status: 201,
+      body: {
+        subscription_id: subscriptionId,
+        tenant_id: TENANT,
+        url: 'https://customer.example.com/wh',
+        event_types: ['decision.recorded', 'dossier.generated'],
+        signing_key_id: 'verixa-sig-prod-acme',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    const result = await client.webhooks.subscribe({
+      tenantId: TENANT,
+      url: 'https://customer.example.com/wh',
+      eventTypes: ['decision.recorded', 'dossier.generated'],
+      signingKeyId: 'verixa-sig-prod-acme',
+      returnTyped: true,
+    });
+    expect(result.subscriptionId).toBe(subscriptionId);
+    expect(result.tenantId).toBe(TENANT);
+    expect(result.signingKeyId).toBe('verixa-sig-prod-acme');
+    expect(Object.isFrozen(result.eventTypes)).toBe(true);
+  });
+
+  it('listSubscriptions with returnTyped:true returns WebhookSubscriptionListResponse', async () => {
+    const { client } = makeClient({
+      body: {
+        subscriptions: [
+          {
+            subscription_id: '00000000-0000-0000-0000-0000000000de',
+            tenant_id: TENANT,
+            url: 'https://customer.example.com/wh',
+            event_types: ['decision.recorded'],
+            signing_key_id: 'verixa-sig-prod-acme',
+            created_at: '2026-05-11T22:00:00Z',
+          },
+        ],
+        total: 1,
+      },
+    });
+    const result = await client.webhooks.listSubscriptions({
+      returnTyped: true,
+    });
+    expect(result.total).toBe(1);
+    expect(result.subscriptions.length).toBe(1);
+    expect(Object.isFrozen(result.subscriptions)).toBe(true);
+  });
+
+  it('recentDeliveries with returnTyped:true returns WebhookDeliveryListResponse', async () => {
+    const { client } = makeClient({
+      body: {
+        deliveries: [
+          {
+            attempt_id: '00000000-0000-0000-0000-0000000000df',
+            subscription_id: '00000000-0000-0000-0000-0000000000e0',
+            event_id: '00000000-0000-0000-0000-0000000000e1',
+            url: 'https://customer.example.com/wh',
+            status_code: 200,
+            latency_ms: 42,
+            attempted_at: '2026-05-11T22:00:00Z',
+            error: null,
+          },
+        ],
+        total: 1,
+      },
+    });
+    const result = await client.webhooks.recentDeliveries({
+      returnTyped: true,
+    });
+    expect(result.total).toBe(1);
+    expect(result.deliveries[0]?.statusCode).toBe(200);
+    expect(result.deliveries[0]?.error).toBeNull();
+    expect(Object.isFrozen(result.deliveries)).toBe(true);
+  });
 });
