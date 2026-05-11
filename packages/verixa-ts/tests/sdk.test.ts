@@ -510,16 +510,80 @@ describe('agents', () => {
 });
 
 describe('tools', () => {
-  it('register posts schema', async () => {
-    const { client, captured } = makeClient({ status: 201, body: {} });
+  // CP-74 wire-format correction: the CP-51 SDK sent workflow_id +
+  // schema which the server's strict extra='forbid' schema rejected.
+  // Tools are NOT workflow-scoped on the server -- they belong to the
+  // tenant. Server accepts name + description + is_active +
+  // allowed_workflow_ids (per-tool ACL; empty = any-workflow).
+  it('register posts correct body', async () => {
+    const { client, captured } = makeClient({
+      status: 201,
+      body: {
+        tool_id: '00000000-0000-0000-0000-000000000020',
+        name: 'transfer-funds',
+        is_active: true,
+        allowed_workflow_ids: [WORKFLOW],
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
     await client.tools.register({
-      workflowId: WORKFLOW,
       name: 'transfer-funds',
-      schema: { type: 'object' },
+      description: 'moves money between accounts',
+      isActive: true,
+      allowedWorkflowIds: [WORKFLOW],
     });
     const body = JSON.parse(captured[0]?.init?.body as string);
     expect(body.name).toBe('transfer-funds');
-    expect(body.schema).toEqual({ type: 'object' });
+    expect(body.description).toBe('moves money between accounts');
+    expect(body.is_active).toBe(true);
+    expect(body.allowed_workflow_ids).toEqual([WORKFLOW]);
+    // CP-74 bug-fix: legacy fields MUST NOT be sent (server rejects).
+    expect(body.workflow_id).toBeUndefined();
+    expect(body.schema).toBeUndefined();
+  });
+
+  it('register uses documented defaults', async () => {
+    // Server defaults: description='', is_active=true, allowed_workflow_ids=[].
+    const { client, captured } = makeClient({
+      status: 201,
+      body: {
+        tool_id: '00000000-0000-0000-0000-000000000021',
+        name: 'x',
+        is_active: true,
+        allowed_workflow_ids: [],
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    await client.tools.register({ name: 'x' });
+    const body = JSON.parse(captured[0]?.init?.body as string);
+    expect(body.description).toBe('');
+    expect(body.is_active).toBe(true);
+    expect(body.allowed_workflow_ids).toEqual([]);
+  });
+
+  it('register with returnTyped:true returns ToolRegisterResponse', async () => {
+    const toolId = '00000000-0000-0000-0000-0000000000bb';
+    const { client } = makeClient({
+      status: 201,
+      body: {
+        tool_id: toolId,
+        name: 'transfer-funds',
+        is_active: true,
+        allowed_workflow_ids: [WORKFLOW],
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    const result = await client.tools.register({
+      name: 'transfer-funds',
+      allowedWorkflowIds: [WORKFLOW],
+      returnTyped: true,
+    });
+    expect(result.toolId).toBe(toolId);
+    expect(result.name).toBe('transfer-funds');
+    expect(result.isActive).toBe(true);
+    expect(result.allowedWorkflowIds.length).toBe(1);
+    // Frozen immutable array (mirrors Python tuple-not-list).
+    expect(Object.isFrozen(result.allowedWorkflowIds)).toBe(true);
   });
 });
 

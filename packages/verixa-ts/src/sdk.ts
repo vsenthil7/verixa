@@ -1,8 +1,10 @@
 import {
   type AgentRegisterResponse,
+  type ToolRegisterResponse,
   type WorkflowListResponse,
   type WorkflowRegisterResponse,
   parseAgentRegisterResponse,
+  parseToolRegisterResponse,
   parseWorkflowListResponse,
   parseWorkflowRegisterResponse,
 } from './envelopes.js';
@@ -268,25 +270,50 @@ export class AgentsClient {
   }
 }
 
+/**
+ * CP-74: kwargs for ToolsClient.register matching server-side
+ * ToolRegisterRequest. The CP-51 SDK shipped workflowId + name +
+ * schema which the server's extra='forbid' schema rejects.
+ * Tools are NOT workflow-scoped on the server -- they belong to the
+ * tenant and allowedWorkflowIds is the per-tool ACL (empty = any
+ * workflow; non-empty = restricted to those workflows). The schema
+ * field is not part of the wire format; per-tool JSON schema lives
+ * on the agent side.
+ */
 interface ToolRegisterArgs {
-  workflowId: string;
   name: string;
-  schema: Record<string, unknown>;
+  description?: string;
+  isActive?: boolean;
+  allowedWorkflowIds?: string[];
 }
 
 export class ToolsClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async register(args: ToolRegisterArgs): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-74 function overloads for opt-in typed return.
+  async register(
+    args: ToolRegisterArgs & { returnTyped: true },
+  ): Promise<ToolRegisterResponse>;
+  async register(
+    args: ToolRegisterArgs & { returnTyped?: false },
+  ): Promise<unknown>;
+  async register(
+    args: ToolRegisterArgs & { returnTyped?: boolean },
+  ): Promise<unknown | ToolRegisterResponse> {
+    const data = await requestJson(this.config, {
       method: 'POST',
       path: '/v1/control/tools',
       body: {
-        workflow_id: args.workflowId,
         name: args.name,
-        schema: args.schema,
+        description: args.description ?? '',
+        is_active: args.isActive ?? true,
+        allowed_workflow_ids: args.allowedWorkflowIds ?? [],
       },
     });
+    if (args.returnTyped === true) {
+      return parseToolRegisterResponse(data);
+    }
+    return data;
   }
 }
 
