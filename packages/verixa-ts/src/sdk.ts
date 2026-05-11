@@ -2,12 +2,14 @@ import {
   type AgentRegisterResponse,
   type DossierGenerateResponse,
   type DossierGetResponse,
+  type ReplayResponse,
   type ToolRegisterResponse,
   type WorkflowListResponse,
   type WorkflowRegisterResponse,
   parseAgentRegisterResponse,
   parseDossierGenerateResponse,
   parseDossierGetResponse,
+  parseReplayResponse,
   parseToolRegisterResponse,
   parseWorkflowListResponse,
   parseWorkflowRegisterResponse,
@@ -345,15 +347,32 @@ export class AuditClient {
   }
 }
 
+/**
+ * CP-78: ReplayClient.get opt-in returnTyped overload. No wire-format
+ * fix needed (audit_id was already correct in CP-51). Mirrors Python
+ * CP-77.
+ */
 export class ReplayClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async get(args: { auditId: string }): Promise<unknown> {
-    return requestJson(this.config, {
+  async get(
+    args: { auditId: string; returnTyped: true },
+  ): Promise<ReplayResponse>;
+  async get(
+    args: { auditId: string; returnTyped?: false },
+  ): Promise<unknown>;
+  async get(
+    args: { auditId: string; returnTyped?: boolean },
+  ): Promise<unknown | ReplayResponse> {
+    const data = await requestJson(this.config, {
       method: 'POST',
       path: '/v1/control/replay',
       body: { audit_id: args.auditId },
     });
+    if (args.returnTyped === true) {
+      return parseReplayResponse(data);
+    }
+    return data;
   }
 }
 

@@ -612,6 +612,62 @@ describe('replay', () => {
     const body = JSON.parse(captured[0]?.init?.body as string);
     expect(body).toEqual({ audit_id: auditId });
   });
+
+  it('get with returnTyped:true returns ReplayResponse', async () => {
+    // CP-78 opt-in: returns ReplayResponse with frozen readonly arrays
+    // (mirrors Python tuple-not-list immutability) and optional triadReview.
+    const auditId = 'abcd1234-5678-90ab-cdef-1234567890ab';
+    const tenantId = 'aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa';
+    const { client } = makeClient({
+      body: {
+        audit_id: auditId,
+        tenant_id: tenantId,
+        decision: 'allow',
+        risk_score: 0.12,
+        request_envelope: { prompt: 'approve $5000 payment' },
+        retrieved_documents: [{ doc_id: 'd1', content_sha256: 'abc' }],
+        tool_io: [],
+        policy_evaluations: [
+          { package: 'fs.pii', decision: 'allow', reason: 'no pii' },
+        ],
+        triad_review: null,
+        timestamp_unix_ns: 1747000000000000000,
+      },
+    });
+    const result = await client.replay.get({ auditId, returnTyped: true });
+    expect(result.auditId).toBe(auditId);
+    expect(result.tenantId).toBe(tenantId);
+    expect(result.decision).toBe('allow');
+    expect(result.riskScore).toBe(0.12);
+    expect(result.triadReview).toBeNull();
+    // Collections frozen (immutable; mirrors Python tuple-not-list)
+    expect(Object.isFrozen(result.retrievedDocuments)).toBe(true);
+    expect(Object.isFrozen(result.toolIo)).toBe(true);
+    expect(Object.isFrozen(result.policyEvaluations)).toBe(true);
+    expect(result.retrievedDocuments.length).toBe(1);
+  });
+
+  it('get with returnTyped:true parses triad_review when present', async () => {
+    const auditId = 'abcd1234-5678-90ab-cdef-1234567890ab';
+    const tenantId = 'aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa';
+    const triad = { agreement: true, votes: [{ model: 'qwen3', vote: 'approve' }] };
+    const { client } = makeClient({
+      body: {
+        audit_id: auditId,
+        tenant_id: tenantId,
+        decision: 'escalate',
+        risk_score: 0.75,
+        request_envelope: {},
+        retrieved_documents: [],
+        tool_io: [],
+        policy_evaluations: [],
+        triad_review: triad,
+        timestamp_unix_ns: 1747000000000000000,
+      },
+    });
+    const result = await client.replay.get({ auditId, returnTyped: true });
+    expect(result.triadReview).toEqual(triad);
+  });
 });
 
 describe('dossier', () => {
