@@ -69,7 +69,6 @@ CP-36 / CP-37 / CP-38 retrofits 3 of the previously-Phase-1-targeted gaps:
 | Tenant-key compromise scenarios | **CLOSED** with 13 tests across 7 attack models | CP-37 commit `557a7ad` |
 | Race conditions / concurrent writes to audit ledger | **CLOSED** with 8 tests stressing asyncio.Lock under gather | CP-38 commit `53453dd` |
 | Reconstructor audit_id mismatch on cross-tenant substitution (CP-37 attack model 7) | **CLOSED** by CP-40 adding `ReconstructorAuditIdMismatch` exception + audit_id guard in `Reconstructor.reconstruct` + 2 new tests asserting the guard fires with both audit_ids in the exception message | CP-40 (this commit) |
-| Resource exhaustion baseline (1000 concurrent appends / 200 burst snapshots / 500 mixed read+write) | **PARTIAL CLOSE** by CP-42 adding load-tests/ scaffold + 3 baseline tests proving the in-memory infrastructure doesn't drop work under volume. Production-realistic load (Postgres + MinIO + SPIFFE) deferred to Phase 1 with named owners | CP-42 |
 
 The Phase-0-stretch gaps (triad timeout, replay attack, size limits, path
 traversal, Unicode edges) were closed in CP-30 (commits `f372ad2`, `4852f51`,
@@ -84,6 +83,7 @@ explicit backlog items.
 
 | Gap | Why it matters | Effort | Target phase |
 |---|---|---|---|
+| Resource exhaustion (10k simultaneous govern calls) | Survivability under load; defines back-pressure behaviour. Distinct from CP-38 concurrent-correctness; this is a load test, not a correctness test. | MEDIUM | Phase 1 (load tests live separately under load-tests/) |
 | Compromised policy bundle (valid signature, malicious content) | Policy signing prevents unsigned modification but not malicious-signer scenarios. Needs key-rotation + signer-revocation infrastructure to test meaningfully. | HIGH | Phase 2 (needs key-rotation infrastructure per ADR-0008 + future ADR-0011) |
 | Timing-attack byte-position tripwire investigation (CP-36 xfail) | Two xfail-strict-false tests showed ~40x median ratio between byte0-flip and last-byte-flip verification time. Needs investigation with dedicated benchmark harness + larger sample sizes to determine: real timing channel? Python wrapping overhead? OS scheduler artifact on small samples? | MEDIUM | Phase 1 (cryptolib-team investigation; if real, escalate as security finding) |
 
@@ -139,17 +139,7 @@ discipline, but worse than discipline-from-day-one**.
   `Reconstructor.reconstruct` so a tampered audit-index pointing
   `audit_id_a` at Tenant B's storage_key now raises rather than returning
   cross-tenant data. Net +2 tests; pytest 1151 -> 1152; coverage back to 100%.
-- **CP-41** extends TRACEABILITY_MATRIX.md with explicit Negative tests
-  column per BR + reverse-trace entries for every negative-test anchor
-  file. Closes the BRD-first discipline commitment from NEGATIVE_TEST_PLAN
-  Phase 1.
-- **CP-42** partial-close on resource-exhaustion: adds `load-tests/`
-  scaffold + 3 baseline tests (1000 concurrent audit-ledger appends + 200
-  burst snapshots + 500 mixed read+write) proving the in-memory contract
-  doesn't drop work under volume. Production-realistic load (Postgres +
-  MinIO + SPIFFE infrastructure) deferred to Phase 1 with named owners
-  documented in `load-tests/README.md`.
 
-The remaining gaps (compromised-signer policy bundle + timing-attack
-tripwire investigation) are tracked above and have committed-to phase
-targets.
+The remaining gaps (resource exhaustion load tests + compromised-signer
+policy bundle + timing-attack tripwire investigation) are tracked above
+and have committed-to phase targets.
