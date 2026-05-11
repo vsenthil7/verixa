@@ -51,6 +51,7 @@ ruff = "^0.7.0"
 mypy = "^1.13.0"
 freezegun = "^1.5.1"
 testcontainers = {version = "^4.8.2", extras = ["redis"]}
+cyclonedx-bom = "^7.3.0"  # CP-44: CycloneDX 1.6 SBOM generation for tools/sbom_generate.py
 
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]

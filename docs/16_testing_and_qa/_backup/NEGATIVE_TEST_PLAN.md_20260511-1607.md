@@ -149,17 +149,6 @@ discipline, but worse than discipline-from-day-one**.
   doesn't drop work under volume. Production-realistic load (Postgres +
   MinIO + SPIFFE infrastructure) deferred to Phase 1 with named owners
   documented in `load-tests/README.md`.
-- **CP-43** Ed25519-signed OPA policy bundle CLI (`tools/policy_sign.py`)
-  with 22 tests covering 11 error paths -- generate-key + sign + verify
-  (exit 2 on tamper) + show. Production keys belong in HashiCorp Vault
-  transit per ADR-0008; this CLI is for development + CI signing.
-- **CP-44** CycloneDX 1.6 SBOM tool (`tools/sbom_generate.py`) wrapping
-  OWASP cyclonedx-bom 7.3.0 + Ed25519 signing reusing the CP-43 key
-  infrastructure. 64 tests covering all 4 subcommands (generate / sign /
-  verify with --check-signature / show) including drift detection
-  (added/removed/version-changed) + signature failure detection
-  (missing/modified/forged/wrong-key-length/invalid-hex). 3-way exit
-  semantics: 0 success / 2 drift / 3 signature failure.
 
 The remaining gaps (compromised-signer policy bundle + timing-attack
 tripwire investigation) are tracked above and have committed-to phase
