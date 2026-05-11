@@ -275,6 +275,74 @@ class DossierGetResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Webhook envelopes (CP-49)
+# ---------------------------------------------------------------------------
+
+
+class WebhookSubscribeRequest(BaseModel):
+    """POST /v1/control/webhooks/subscriptions -- create a subscription.
+
+    tenant_id is the customer's tenant; url is the HTTPS endpoint we'll
+    POST to on each matching event; event_types is the non-empty subset
+    of the allowlist the subscription wants to receive; signing_key_id
+    is the Vault-tracked key the dispatcher will sign deliveries with.
+    """
+
+    model_config = _strict
+
+    tenant_id: uuid.UUID
+    url: str = Field(min_length=12, max_length=2048)
+    event_types: list[str] = Field(min_length=1, max_length=32)
+    signing_key_id: str = Field(min_length=12, max_length=128)
+
+
+class WebhookSubscriptionSummary(BaseModel):
+    """One subscription as returned by GET /v1/control/webhooks/subscriptions."""
+
+    model_config = _strict
+
+    subscription_id: uuid.UUID
+    tenant_id: uuid.UUID
+    url: str
+    event_types: list[str]
+    signing_key_id: str
+    created_at: datetime
+
+
+class WebhookSubscriptionListResponse(BaseModel):
+    """Returned from GET /v1/control/webhooks/subscriptions."""
+
+    model_config = _strict
+
+    subscriptions: list[WebhookSubscriptionSummary]
+    total: int
+
+
+class WebhookDeliverySummary(BaseModel):
+    """One forensic delivery record."""
+
+    model_config = _strict
+
+    attempt_id: uuid.UUID
+    subscription_id: uuid.UUID
+    event_id: uuid.UUID
+    url: str
+    status_code: int
+    latency_ms: int
+    attempted_at: datetime
+    error: str | None = None
+
+
+class WebhookDeliveryListResponse(BaseModel):
+    """Returned from GET /v1/control/webhooks/deliveries."""
+
+    model_config = _strict
+
+    deliveries: list[WebhookDeliverySummary]
+    total: int
+
+
+# ---------------------------------------------------------------------------
 # Error envelope
 # ---------------------------------------------------------------------------
 

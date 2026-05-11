@@ -60,6 +60,11 @@ from verixa_control_plane.envelopes import (
     DossierGenerateRequest,
     ReplayRequest,
     ToolRegisterRequest,
+    WebhookDeliveryListResponse,
+    WebhookDeliverySummary,
+    WebhookSubscribeRequest,
+    WebhookSubscriptionListResponse,
+    WebhookSubscriptionSummary,
     WorkflowRegisterRequest,
 )
 from verixa_control_plane.handlers import (
@@ -80,6 +85,11 @@ from verixa_control_plane.registry import (
     handle_tool_register,
     handle_workflow_list,
     handle_workflow_register,
+)
+from verixa_control_plane.webhooks import (
+    WebhookDispatcher,
+    WebhookSubscription,
+    WebhookSubscriptionInvalid,
 )
 
 # ---------------------------------------------------------------------------
@@ -114,6 +124,11 @@ class ControlPlaneState:
     # that case rather than 404 so operators can distinguish
     # "disabled" from "no such bundle").
     bundle_server: BundleServer | None = None
+    # CP-49: optional outbound-webhook dispatcher. None disables the
+    # /v1/control/webhooks routes (503). Phase-1 wires up the
+    # InMemoryWebhookDispatcher + InMemory subscriptions store; Phase-1+
+    # swaps for Postgres + AsyncRetryQueue.
+    webhook_dispatcher: WebhookDispatcher | None = None
 
 
 def build_default_state(
@@ -341,6 +356,109 @@ def build_control_plane_router(state: ControlPlaneState) -> APIRouter:
                 ),
             },
         )
+
+    # ---- Webhook subscriptions + deliveries (CP-49) -------------------
+
+    @router.post("/webhooks/subscriptions")
+    async def webhook_subscribe(
+        req: WebhookSubscribeRequest,
+    ) -> JSONResponse:
+        """Create a new webhook subscription.
+
+        201 on success; 400 on invalid URL / event types / signing key id;
+        503 if dispatcher not configured.
+        """
+        if state.webhook_dispatcher is None:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "webhook dispatcher not configured"},
+            )
+        try:
+            subscription = WebhookSubscription(
+                subscription_id=uuid.uuid4(),
+                tenant_id=req.tenant_id,
+                url=req.url,
+                event_types=frozenset(req.event_types),
+                signing_key_id=req.signing_key_id,
+                created_at=datetime.now(),
+            )
+        except WebhookSubscriptionInvalid as e:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "subscription_invalid", "message": str(e)},
+            )
+        await state.webhook_dispatcher.subscribe(subscription)
+        return JSONResponse(
+            status_code=201,
+            content=WebhookSubscriptionSummary(
+                subscription_id=subscription.subscription_id,
+                tenant_id=subscription.tenant_id,
+                url=subscription.url,
+                event_types=sorted(subscription.event_types),
+                signing_key_id=subscription.signing_key_id,
+                created_at=subscription.created_at,
+            ).model_dump(mode="json"),
+        )
+
+    @router.get("/webhooks/subscriptions")
+    async def webhook_list(
+        tenant_id: uuid.UUID | None = Query(default=None),  # noqa: B008
+    ) -> JSONResponse:
+        """List subscriptions, optionally filtered by tenant_id."""
+        if state.webhook_dispatcher is None:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "webhook dispatcher not configured"},
+            )
+        subs = await state.webhook_dispatcher.list_subscriptions(
+            tenant_id=tenant_id
+        )
+        body = WebhookSubscriptionListResponse(
+            subscriptions=[
+                WebhookSubscriptionSummary(
+                    subscription_id=s.subscription_id,
+                    tenant_id=s.tenant_id,
+                    url=s.url,
+                    event_types=sorted(s.event_types),
+                    signing_key_id=s.signing_key_id,
+                    created_at=s.created_at,
+                )
+                for s in subs
+            ],
+            total=len(subs),
+        )
+        return JSONResponse(status_code=200, content=body.model_dump(mode="json"))
+
+    @router.get("/webhooks/deliveries")
+    async def webhook_deliveries(
+        limit: int = Query(default=50, ge=1, le=1000),
+    ) -> JSONResponse:
+        """Recent delivery forensics for SIEM correlation."""
+        if state.webhook_dispatcher is None:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "webhook dispatcher not configured"},
+            )
+        attempts = await state.webhook_dispatcher.recent_deliveries(
+            limit=limit
+        )
+        body = WebhookDeliveryListResponse(
+            deliveries=[
+                WebhookDeliverySummary(
+                    attempt_id=a.attempt_id,
+                    subscription_id=a.subscription_id,
+                    event_id=a.event_id,
+                    url=a.url,
+                    status_code=a.status_code,
+                    latency_ms=a.latency_ms,
+                    attempted_at=a.attempted_at,
+                    error=a.error,
+                )
+                for a in attempts
+            ],
+            total=len(attempts),
+        )
+        return JSONResponse(status_code=200, content=body.model_dump(mode="json"))
 
     return router
 
