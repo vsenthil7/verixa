@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project will adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 from Phase 1 onwards. Phase 0 is pre-versioned and tracked by commit + checkpoint.
 
+The Verixa platform itself is still Phase 0 (pre-release). The **SDKs** carry their own
+SemVer versions because customers depend on them independently of the platform release
+cadence. SDK release notes live in `packages/verixa-python/CHANGELOG.md` and
+`packages/verixa-ts/CHANGELOG.md`; this file links to each SDK release tag.
+
+---
+
+## SDK releases
+
+### v0.2.0 — 2026-05-12 (typed-response surface)
+
+First versioned SDK release with the full typed-response surface + corrected
+request schemas. Released in lockstep across both SDKs (matching the CP-59
+release pipeline design):
+
+- `verixa@0.2.0` (Python; PyPI) — full notes in `packages/verixa-python/CHANGELOG.md`
+- `@verixa/ts@0.2.0` (TypeScript; npm) — full notes in `packages/verixa-ts/CHANGELOG.md`
+
+Highlights:
+- 15 typed envelope dataclasses (Python) / 14 typed interfaces (TS) mirroring every
+  server-side response envelope
+- Opt-in `return_typed=True` / `returnTyped: true` overloads on all 11 resource-client
+  methods that have typed envelopes; default behaviour unchanged for full v0.1.0
+  backward compatibility
+- 4 wire-format request-side bugs fixed in the v0.1.0 alpha (Workflows.register,
+  Agents.register, Tools.register, Dossier.generate); without these fixes every
+  v0.1.0 call site would 422 against the real server
+- `InvalidEnvelopeError` exception with `field {name}: ...` prefix matching across
+  both SDKs for cross-language debuggability
+
+### v0.1.0 — 2026-05-11 (alpha)
+
+First public alpha of both SDKs. Async clients covering all routes wired through
+Phase-1 CP-49.
+
 ---
 
 ## [Unreleased] — Phase 0 (hackathon prototype)
