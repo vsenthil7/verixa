@@ -151,11 +151,9 @@ jobs:
         run: poetry config virtualenvs.in-project true
 
       - name: Install Python dependencies
-        ## The Playwright webServer config boots
-        ## ``.venv/bin/python -m uvicorn`` (on Windows it's
-        ## .venv\Scripts\python -- see note below). We patch
-        ## the playwright.config.ts at runtime for Linux paths
-        ## via env var, or rely on PATH if .venv is activated.
+        ## Playwright's webServer block boots uvicorn via the
+        ## VERIXA_UVICORN_CMD env var set below; playwright.config.ts
+        ## already handles both Windows + Linux venv layouts.
         run: poetry install --no-interaction --with dev
 
       - name: Set up pnpm
@@ -200,14 +198,10 @@ jobs:
         working-directory: apps/control-plane-ui
         env:
           CI: "true"
-          ## On Linux CI runners the uvicorn binary lives at
-          ## ../../.venv/bin/uvicorn after `poetry install` with
-          ## virtualenvs.in-project = true. The playwright config
-          ## currently hardcodes the Windows path .venv\Scripts\python.
-          ## We override via the VERIXA_UVICORN_CMD env var below.
-          ## NOTE: this assumes playwright.config.ts honours
-          ## VERIXA_UVICORN_CMD; a fallback patch is applied as a
-          ## pre-step below. See deploy/ci/README.md (CP-21.2).
+          ## playwright.config.ts honours VERIXA_UVICORN_CMD with
+          ## highest precedence (CP-21.2 cross-platform refactor).
+          ## Linux Poetry venv lives at ../../.venv/bin/python
+          ## after `poetry install` with virtualenvs.in-project = true.
           VERIXA_UVICORN_CMD: ../../.venv/bin/python -m uvicorn
         run: pnpm exec playwright test --reporter=list
 
