@@ -91,6 +91,27 @@ testpaths = [
     "apps/control-plane-api/tests",
     "packages/verixa-python/tests",
 ]
+# CP-32 hardening (2026-05-11): exclude _backup folders + standard noise
+# directories from pytest discovery. Without this, files in
+# packages/**/tests/_backup or packages/**/_backup/tests get collected
+# as test modules and either run (wrong) or fail collection (also wrong).
+# Discovered during CP-30.1 ReplayBundle fix when a backup of
+# test_size_limits.py landed inside tests/ and pytest errored on it.
+# BLD-013 + CLAUDE_RULES TESTING RULES require this guardrail.
+norecursedirs = [
+    "_backup",
+    ".git",
+    ".venv",
+    "__pycache__",
+    "node_modules",
+    "htmlcov",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    "build",
+    "dist",
+    "hf_space_build",
+]
 addopts = [
     "-ra",
     "--strict-markers",
