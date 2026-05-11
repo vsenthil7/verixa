@@ -10,11 +10,10 @@ default-value path.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
-
 from verixa_control_plane.envelopes import (
     AgentRegisterRequest,
     AgentRegisterResponse,
@@ -34,14 +33,13 @@ from verixa_control_plane.envelopes import (
     WorkflowSummary,
 )
 
-
 _WF_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
 _AGENT_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 _TOOL_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 _TENANT_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 _AUDIT_ID = uuid.UUID("55555555-5555-5555-5555-555555555555")
 _DOSSIER_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
-_NOW = datetime(2026, 5, 10, 23, 59, tzinfo=timezone.utc)
+_NOW = datetime(2026, 5, 10, 23, 59, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

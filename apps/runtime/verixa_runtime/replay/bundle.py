@@ -45,7 +45,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Final
 
-
 # Bumped when the bundle schema changes in a non-backward-compatible
 # way. Reconstructor refuses to deserialise unknown versions so a
 # downgrade can't silently misinterpret a newer bundle.

@@ -37,7 +37,6 @@ from verixa_runtime.crypto.aes_gcm import AesGcmCiphertext
 from verixa_runtime.replay.sealer import EncryptedBundle
 from verixa_runtime.replay.store import BundleConflict, BundleNotFound
 
-
 # On-disk wire format version; bumped when the JSON shape changes
 # incompatibly. The MinIO object body is JSON, the bytes inside are
 # base64-encoded.

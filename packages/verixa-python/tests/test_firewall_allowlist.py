@@ -8,7 +8,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from verixa_runtime.firewall.allowlist import (
     CODE_NO_TOOL_NAME,
     CODE_TOOL_INACTIVE,
@@ -20,7 +19,6 @@ from verixa_runtime.firewall.allowlist import (
     evaluate_allowlist,
 )
 from verixa_runtime.gateway.envelopes import GovernAction
-
 
 WF_A = uuid.UUID("11111111-1111-1111-1111-111111111111")
 WF_B = uuid.UUID("22222222-2222-2222-2222-222222222222")

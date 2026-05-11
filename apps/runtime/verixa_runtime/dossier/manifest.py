@@ -27,15 +27,18 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Final
+from typing import Final
 
 from verixa_runtime.crypto.ed25519 import (
     Ed25519SignatureError,
+)
+from verixa_runtime.crypto.ed25519 import (
     sign as ed25519_sign,
+)
+from verixa_runtime.crypto.ed25519 import (
     verify as ed25519_verify,
 )
 from verixa_runtime.replay.bundle import ReplayBundle
-
 
 # Bumped when manifest schema changes incompatibly. Verifier refuses
 # unknown versions so a Phase-1 manifest can't be silently

@@ -9,11 +9,10 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-
 from verixa_runtime.audit.emitter import (
     AuditEmitInput,
     AuditEmitRecord,
@@ -25,7 +24,6 @@ from verixa_runtime.audit.verifier import (
     verify_audit_chain,
 )
 from verixa_runtime.crypto.key_bootstrap import TenantKeyBundle, bootstrap_tenant
-
 
 # ---------------------------------------------------------------------------
 # Fixtures + helpers
@@ -48,7 +46,7 @@ def _emit_chain(
     """Helper: emit a length-N valid chain."""
     records: list[AuditEmitRecord] = []
     prev: bytes | None = None
-    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc)
+    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC)
     for seq in range(length):
         emit_in = AuditEmitInput(
             tenant_id=tenant_id,

@@ -34,7 +34,7 @@ from datetime import datetime
 from fastapi import APIRouter, FastAPI, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-
+from verixa_runtime.crypto.aes_gcm import AesGcmKey, generate_key
 from verixa_runtime.crypto.ed25519 import Ed25519KeyPair, generate_keypair
 from verixa_runtime.replay import (
     InMemoryAuditIndex,
@@ -42,7 +42,6 @@ from verixa_runtime.replay import (
     Reconstructor,
     Snapshotter,
 )
-from verixa_runtime.crypto.aes_gcm import AesGcmKey, generate_key
 
 from verixa_control_plane.app import create_app
 from verixa_control_plane.audit import (
@@ -76,7 +75,6 @@ from verixa_control_plane.registry import (
     handle_workflow_list,
     handle_workflow_register,
 )
-
 
 # ---------------------------------------------------------------------------
 # App-state container

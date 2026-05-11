@@ -25,12 +25,10 @@ to ESCALATE, never to an accidental ALLOW or DENY.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import pytest
-
 from verixa_runtime.triad import (
     ConsensusKind,
     MockReviewer,
@@ -41,7 +39,6 @@ from verixa_runtime.triad import (
     VerdictDecision,
     consensus_to_decision,
 )
-
 
 _AUDIT_ID = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
@@ -74,8 +71,8 @@ def _timeout_factory(
 
     async def _factory(_a: uuid.UUID, _s: str) -> ReviewerVerdict:
         try:
-            raise asyncio.TimeoutError("reviewer deadline 5s exceeded")
-        except asyncio.TimeoutError as exc:
+            raise TimeoutError("reviewer deadline 5s exceeded")
+        except TimeoutError as exc:
             raise ReviewerError(
                 f"{reviewer_id.value} timed out: {exc}"
             ) from exc

@@ -8,10 +8,9 @@ handle_audit_query happy + error paths.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
-
 from verixa_control_plane.audit import (
     AuditLedgerEntry,
     InMemoryAuditLedger,
@@ -22,11 +21,10 @@ from verixa_control_plane.envelopes import (
     ErrorResponse,
 )
 
-
 _WF_A = uuid.UUID("a1111111-1111-1111-1111-111111111111")
 _WF_B = uuid.UUID("b2222222-2222-2222-2222-222222222222")
 _TENANT = uuid.UUID("cccc3333-3333-3333-3333-333333333333")
-_T_BASE = datetime(2026, 5, 10, 12, 0, tzinfo=timezone.utc)
+_T_BASE = datetime(2026, 5, 10, 12, 0, tzinfo=UTC)
 
 
 def _entry(

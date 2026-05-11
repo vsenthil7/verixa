@@ -9,7 +9,6 @@ from __future__ import annotations
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
 from verixa_runtime.crypto.ed25519 import (
     PRIVATE_KEY_BYTES,
     PUBLIC_KEY_BYTES,

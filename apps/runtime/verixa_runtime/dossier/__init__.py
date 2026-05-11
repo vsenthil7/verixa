@@ -35,7 +35,6 @@ from verixa_runtime.dossier.manifest import (  # noqa: F401
     verify_signed_dossier,
 )
 
-
 __all__ = [
     "DOSSIER_SCHEMA_VERSION",
     "DossierManifest",

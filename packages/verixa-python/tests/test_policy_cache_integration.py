@@ -40,7 +40,6 @@ from verixa_runtime.policy.client import (
     PolicyDecisionKind,
 )
 
-
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
 

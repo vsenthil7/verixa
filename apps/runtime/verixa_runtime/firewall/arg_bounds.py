@@ -44,7 +44,6 @@ from typing import Any, Final
 from verixa_runtime.firewall.allowlist import FirewallDecision, FirewallVerdict
 from verixa_runtime.gateway.envelopes import GovernAction
 
-
 # Error codes -- stable identifiers for log lines / customer messages
 CODE_ARG_MISSING: Final[str] = "firewall.argument.missing"
 CODE_ARG_UNKNOWN: Final[str] = "firewall.argument.unknown"

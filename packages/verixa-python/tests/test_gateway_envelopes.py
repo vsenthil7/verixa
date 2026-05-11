@@ -11,7 +11,6 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-
 from verixa_runtime.gateway.envelopes import (
     AgentIdentity,
     Decision,
@@ -24,7 +23,6 @@ from verixa_runtime.gateway.envelopes import (
     RetrievedDocument,
     RiskClassification,
 )
-
 
 # ---------------------------------------------------------------------------
 # Enums

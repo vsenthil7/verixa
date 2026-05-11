@@ -38,7 +38,6 @@ import json
 import uuid
 
 import pytest
-
 from verixa_runtime.replay import (
     BUNDLE_SCHEMA_VERSION,
     PolicyEvaluationRecord,
@@ -47,7 +46,6 @@ from verixa_runtime.replay import (
     canonicalise_bundle,
     deserialise_bundle,
 )
-
 
 _AUDIT_ID_ORIG = uuid.UUID("11111111-1111-1111-1111-111111111111")
 _AUDIT_ID_NEW = uuid.UUID("22222222-2222-2222-2222-222222222222")

@@ -42,7 +42,6 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-
 from verixa_runtime.gateway.envelopes import (
     AgentIdentity,
     GovernContext,
@@ -53,7 +52,6 @@ from verixa_runtime.replay import (
     canonicalise_bundle,
     deserialise_bundle,
 )
-
 
 _WF_ID = uuid.UUID("66666666-6666-6666-6666-666666666666")
 _AUDIT_ID = uuid.UUID("77777777-7777-7777-7777-777777777777")

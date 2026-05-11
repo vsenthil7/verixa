@@ -8,7 +8,6 @@ Approach: parameterised tests for each forbidden rule (clean + dirty cases)
 from __future__ import annotations
 
 import pytest
-
 from verixa.compliance_language import (
     ComplianceLanguageViolation,
     Violation,

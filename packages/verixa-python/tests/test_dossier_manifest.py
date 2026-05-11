@@ -11,10 +11,8 @@ import json
 import uuid
 
 import pytest
-
 from verixa_runtime.crypto.ed25519 import generate_keypair
 from verixa_runtime.dossier import (
-    DOSSIER_SCHEMA_VERSION,
     DossierManifest,
     DossierManifestError,
     SignedDossier,
@@ -28,7 +26,6 @@ from verixa_runtime.replay import (
     ReplayBundle,
     TriadReviewRecord,
 )
-
 
 _AUDIT_ID = uuid.UUID("aaaa1111-2222-3333-4444-555555555555")
 _TENANT_ID = uuid.UUID("bbbb1111-2222-3333-4444-555555555555")

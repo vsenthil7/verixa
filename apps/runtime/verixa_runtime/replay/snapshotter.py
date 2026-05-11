@@ -34,8 +34,9 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from verixa_runtime.crypto.aes_gcm import AesGcmKey
 from verixa_runtime.replay.bundle import (
@@ -49,7 +50,6 @@ from verixa_runtime.replay.sealer import (
     encrypt_bundle,
 )
 from verixa_runtime.replay.store import BundleNotFound, BundleStore
-
 
 # Callable that resolves a tenant_id to its AES-256 data-encryption
 # key. Production: pulls from Vault transit. Tests: a dict lookup.

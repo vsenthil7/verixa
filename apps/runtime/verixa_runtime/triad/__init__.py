@@ -52,6 +52,12 @@ HF Inference Endpoints, mock fixtures, all produce ReviewerVerdict
 objects that flow through the same primitives.
 """
 
+from verixa_runtime.triad.orchestrator import (  # noqa: F401
+    AuditEmitCommitments,
+    TriadOrchestrator,
+    TriadOutcome,
+    consensus_to_decision,
+)
 from verixa_runtime.triad.protocol import (  # noqa: F401
     Commitment,
     ConsensusKind,
@@ -72,13 +78,6 @@ from verixa_runtime.triad.reviewer import (  # noqa: F401
     ReviewerConfig,
     ReviewerError,
 )
-from verixa_runtime.triad.orchestrator import (  # noqa: F401
-    AuditEmitCommitments,
-    TriadOrchestrator,
-    TriadOutcome,
-    consensus_to_decision,
-)
-
 
 __all__ = [
     "AuditEmitCommitments",

@@ -55,7 +55,11 @@ from typing import Final
 from verixa_runtime.crypto.ed25519 import (
     Ed25519KeyPair,
     Ed25519SignatureError,
+)
+from verixa_runtime.crypto.ed25519 import (
     sign as ed25519_sign,
+)
+from verixa_runtime.crypto.ed25519 import (
     verify as ed25519_verify,
 )
 

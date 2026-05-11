@@ -38,7 +38,6 @@ from verixa_runtime.policy.client import (
     PolicyDecisionKind,
 )
 
-
 # Risk score weights -- documented in __init__.py; constants here
 # so they're testable.
 RISK_FAIL_WEIGHT: Final[float] = 0.30

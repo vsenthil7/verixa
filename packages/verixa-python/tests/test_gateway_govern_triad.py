@@ -13,9 +13,7 @@ _summarise_request_for_triad).
 from __future__ import annotations
 
 import uuid
-from typing import Awaitable, Callable
-
-import pytest
+from collections.abc import Awaitable, Callable
 
 from verixa_runtime.gateway import (
     AgentIdentity,
@@ -33,7 +31,6 @@ from verixa_runtime.triad import (
     TriadOrchestrator,
     VerdictDecision,
 )
-
 
 _WF_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 

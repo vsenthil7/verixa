@@ -31,8 +31,8 @@ import json
 import uuid
 
 import pytest
-from hypothesis import given, strategies as st
-
+from hypothesis import given
+from hypothesis import strategies as st
 from verixa_runtime.triad import (
     Commitment,
     ConsensusKind,
@@ -47,7 +47,6 @@ from verixa_runtime.triad import (
     verify_reveal,
 )
 from verixa_runtime.triad.protocol import NONCE_BYTES
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -261,12 +260,12 @@ def _three_reveals(
     nonces = (b"\x01" * NONCE_BYTES, b"\x02" * NONCE_BYTES, b"\x03" * NONCE_BYTES)
     verdicts = tuple(
         _make_verdict(reviewer_id=rid, decision=d)
-        for rid, d in zip(rids, decisions)
+        for rid, d in zip(rids, decisions, strict=False)
     )
     commitments = tuple(
-        compute_commitment(v, n) for v, n in zip(verdicts, nonces)
+        compute_commitment(v, n) for v, n in zip(verdicts, nonces, strict=False)
     )
-    reveals = tuple(zip(verdicts, nonces))
+    reveals = tuple(zip(verdicts, nonces, strict=False))
     return commitments, reveals  # type: ignore[return-value]
 
 

@@ -25,7 +25,6 @@ import uuid
 from pathlib import Path
 
 import pytest
-
 from verixa_runtime.crypto.key_bootstrap import bootstrap_tenant
 from verixa_runtime.policy.signing import (
     SIGNATURES_FILENAME,
@@ -36,7 +35,6 @@ from verixa_runtime.policy.signing import (
     sign_bundle,
     verify_bundle_signatures,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

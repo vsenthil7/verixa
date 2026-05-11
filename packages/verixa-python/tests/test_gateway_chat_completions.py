@@ -17,10 +17,8 @@ from unittest.mock import patch
 import httpx
 import pytest
 from fastapi.testclient import TestClient
-
 from verixa_runtime.app import create_app
 from verixa_runtime.gateway import chat_completions as chat_module
-
 
 # ---------------------------------------------------------------------------
 # Fixtures + helpers

@@ -11,7 +11,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from verixa_runtime.policy import client as client_module
 from verixa_runtime.policy.client import (
     OpaPolicyClient,
@@ -21,7 +20,6 @@ from verixa_runtime.policy.client import (
     _package_to_url_path,
     _parse_opa_response,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

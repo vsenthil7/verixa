@@ -11,22 +11,20 @@ this test) -> audit-query -> replay -> dossier-generate -> dossier-get
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
-
-from verixa_runtime.dossier import SignedDossier, verify_signed_dossier
-from verixa_runtime.dossier.manifest import DossierManifest
-from verixa_runtime.replay.snapshotter import SnapshotInputs
-
 from verixa_control_plane.audit import AuditLedgerEntry
 from verixa_control_plane.routes import (
     build_default_state,
     create_app_with_state,
 )
+from verixa_runtime.dossier import SignedDossier, verify_signed_dossier
+from verixa_runtime.dossier.manifest import DossierManifest
+from verixa_runtime.replay.snapshotter import SnapshotInputs
 
 
-def _client() -> tuple[TestClient, "ControlPlaneStateType"]:  # type: ignore[name-defined]
+def _client() -> tuple[TestClient, ControlPlaneStateType]:  # type: ignore[name-defined]
     state = build_default_state()
     app = create_app_with_state(state)
     return TestClient(app), state
@@ -234,7 +232,7 @@ def test_get_audit_returns_seeded_entries() -> None:
 
     client, state = _client()
     wf_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     async def seed():
         await state.audit_ledger.append(
@@ -269,7 +267,7 @@ def test_get_audit_returns_seeded_entries() -> None:
 
 def test_get_audit_inverted_range_returns_400() -> None:
     client, _ = _client()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     r = client.get(
         "/v1/control/audit",
         params={
@@ -371,7 +369,7 @@ def test_end_to_end_trust_anchor_via_http() -> None:
     # + audit ledger on the shared state.
     tenant_id = uuid.uuid4()
     audit_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     async def seed():
         await state.snapshotter.snapshot(

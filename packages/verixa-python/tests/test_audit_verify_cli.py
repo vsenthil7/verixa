@@ -11,19 +11,16 @@ import json
 import sys
 import uuid
 from collections.abc import Callable
-from dataclasses import asdict, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 import pytest
-
 from verixa_runtime.audit.emitter import AuditEmitInput, emit_audit_record
 from verixa_runtime.audit.verifier import PersistedAuditEntry
 from verixa_runtime.crypto.key_bootstrap import bootstrap_tenant
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CLI_PATH = REPO_ROOT / "tools" / "audit_verify.py"
@@ -54,7 +51,7 @@ def _build_chain_export(
     bundle = bootstrap_tenant(tenant_id)
     persisted: list[PersistedAuditEntry] = []
     prev: bytes | None = None
-    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc)
+    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC)
     for seq in range(length):
         emit_in = AuditEmitInput(
             tenant_id=tenant_id,

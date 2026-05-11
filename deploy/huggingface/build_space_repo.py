@@ -29,7 +29,6 @@ import shutil
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 DEPLOY_DIR = REPO_ROOT / "deploy" / "huggingface"
 

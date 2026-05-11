@@ -21,7 +21,6 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-
 from verixa_runtime.app import create_app
 from verixa_runtime.gateway import (
     AgentIdentity,
@@ -35,7 +34,6 @@ from verixa_runtime.gateway import (
     decide_via_router,
 )
 from verixa_runtime.policy.client import PolicyDecision, PolicyDecisionKind
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

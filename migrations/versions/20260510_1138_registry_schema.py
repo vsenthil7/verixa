@@ -7,15 +7,15 @@ Create Date: 2026-05-10 11:38:00 UK
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260510_1138_registry_schema"
-down_revision: Union[str, None] = "20260510_1130_baseline_tenancy"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "20260510_1130_baseline_tenancy"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:

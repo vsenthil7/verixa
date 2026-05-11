@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
 from verixa_runtime.crypto.hash_chain import (
     GENESIS_PREFIX,
     SHA256_BYTES,
@@ -41,7 +40,7 @@ def _make_entry(
 ) -> HashChainEntry:
     return HashChainEntry(
         sequence_number=seq,
-        event_time=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
+        event_time=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
         workflow_id=workflow_id or uuid.UUID("11111111-1111-1111-1111-111111111111"),
         agent_id=agent_id or uuid.UUID("22222222-2222-2222-2222-222222222222"),
         action_type="tool_call",
@@ -71,7 +70,7 @@ def test_entry_rejects_negative_sequence_number() -> None:
     with pytest.raises(ValueError, match="sequence_number must be non-negative"):
         HashChainEntry(
             sequence_number=-1,
-            event_time=datetime.now(tz=timezone.utc),
+            event_time=datetime.now(tz=UTC),
             workflow_id=uuid.uuid4(),
             agent_id=uuid.uuid4(),
             action_type="x",
@@ -86,7 +85,7 @@ def test_entry_rejects_wrong_snapshot_hash_length() -> None:
     with pytest.raises(ValueError, match="snapshot_hash must be 32 bytes"):
         HashChainEntry(
             sequence_number=0,
-            event_time=datetime.now(tz=timezone.utc),
+            event_time=datetime.now(tz=UTC),
             workflow_id=uuid.uuid4(),
             agent_id=uuid.uuid4(),
             action_type="x",
@@ -101,7 +100,7 @@ def test_entry_rejects_wrong_prev_hash_length() -> None:
     with pytest.raises(ValueError, match="hash_chain_prev must be 32 bytes"):
         HashChainEntry(
             sequence_number=0,
-            event_time=datetime.now(tz=timezone.utc),
+            event_time=datetime.now(tz=UTC),
             workflow_id=uuid.uuid4(),
             agent_id=uuid.uuid4(),
             action_type="x",

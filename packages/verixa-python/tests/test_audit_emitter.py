@@ -9,11 +9,10 @@ with the real walk and its own tests.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-
 from verixa_runtime.audit.emitter import (
     AuditEmitInput,
     AuditEmitRecord,
@@ -27,7 +26,6 @@ from verixa_runtime.crypto.hash_chain import (
     compute_self_hash,
 )
 from verixa_runtime.crypto.key_bootstrap import bootstrap_tenant
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -49,7 +47,7 @@ def base_input(tenant_id, bundle) -> AuditEmitInput:
     return AuditEmitInput(
         tenant_id=tenant_id,
         sequence_number=0,
-        event_time=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
+        event_time=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
         workflow_id=uuid.UUID("22222222-2222-2222-2222-222222222222"),
         agent_id=uuid.UUID("33333333-3333-3333-3333-333333333333"),
         action_type="tool_call",
@@ -72,7 +70,7 @@ def test_input_rejects_non_uuid_tenant(bundle) -> None:
         AuditEmitInput(
             tenant_id="not-uuid",  # type: ignore[arg-type]
             sequence_number=0,
-            event_time=datetime.now(tz=timezone.utc),
+            event_time=datetime.now(tz=UTC),
             workflow_id=uuid.uuid4(),
             agent_id=uuid.uuid4(),
             action_type="x",

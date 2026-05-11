@@ -15,7 +15,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from verixa_runtime.policy.bundle import (
     PolicyBundleError,
     PolicyEntry,

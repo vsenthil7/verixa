@@ -42,8 +42,9 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Final, Protocol
+from typing import Any, Final, Protocol
 
 import httpx
 
@@ -52,7 +53,6 @@ from verixa_runtime.triad.protocol import (
     ReviewerVerdict,
     VerdictDecision,
 )
-
 
 # ---------------------------------------------------------------------------
 # Errors

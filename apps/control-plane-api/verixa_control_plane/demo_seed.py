@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from verixa_runtime.replay.bundle import (
     PolicyEvaluationRecord,
@@ -53,11 +53,10 @@ from verixa_control_plane.registry import (
 )
 from verixa_control_plane.routes import ControlPlaneState
 
-
 # Pinned timestamps so the demo always shows the same audit history.
-_T0 = datetime(2026, 5, 10, 9, 15, tzinfo=timezone.utc)
-_T1 = datetime(2026, 5, 10, 11, 42, tzinfo=timezone.utc)
-_T2 = datetime(2026, 5, 10, 14, 3, tzinfo=timezone.utc)
+_T0 = datetime(2026, 5, 10, 9, 15, tzinfo=UTC)
+_T1 = datetime(2026, 5, 10, 11, 42, tzinfo=UTC)
+_T2 = datetime(2026, 5, 10, 14, 3, tzinfo=UTC)
 
 
 @dataclass(frozen=True)

@@ -37,7 +37,6 @@ import uuid
 
 import httpx
 import pytest
-
 from verixa_runtime.triad import (
     ConsensusKind,
     OpenAICompatReviewer,
@@ -47,7 +46,6 @@ from verixa_runtime.triad import (
     VerdictDecision,
     consensus_to_decision,
 )
-
 
 pytestmark = pytest.mark.integration
 

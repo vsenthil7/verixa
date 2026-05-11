@@ -25,7 +25,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
 from verixa_control_plane.envelopes import (
@@ -39,7 +39,6 @@ from verixa_control_plane.envelopes import (
     WorkflowRegisterResponse,
     WorkflowSummary,
 )
-
 
 # ---------------------------------------------------------------------------
 # Row types (private to the registry layer)
@@ -185,7 +184,7 @@ class InMemoryToolRegistry:
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 async def handle_workflow_register(

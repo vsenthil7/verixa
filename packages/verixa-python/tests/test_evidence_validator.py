@@ -22,7 +22,6 @@ Layers:
 from __future__ import annotations
 
 import pytest
-
 from verixa_runtime.evidence import (
     GROUND_THRESHOLD,
     EvidenceCheck,
@@ -30,7 +29,6 @@ from verixa_runtime.evidence import (
     RetrievedDocument,
     validate_evidence,
 )
-
 
 # ---------------------------------------------------------------------------
 # Layer 1 -- dataclass invariants

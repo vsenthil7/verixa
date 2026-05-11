@@ -17,7 +17,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from verixa_runtime.firewall.allowlist import (
     CODE_TOOL_NOT_REGISTERED,
     CODE_WORKFLOW_NOT_PERMITTED,
@@ -53,7 +52,6 @@ from verixa_runtime.risk.router import (
     compute_risk,
     route_decision,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

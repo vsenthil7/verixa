@@ -17,10 +17,9 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Awaitable, Callable
+from collections.abc import Awaitable, Callable
 
 import pytest
-
 from verixa_runtime.crypto.aes_gcm import generate_key
 from verixa_runtime.gateway import (
     AgentIdentity,
@@ -38,7 +37,6 @@ from verixa_runtime.replay import (
     Reconstructor,
     Snapshotter,
 )
-from verixa_runtime.replay.snapshotter import SnapshotInputs
 from verixa_runtime.triad import (
     MockReviewer,
     ReviewerId,
@@ -46,7 +44,6 @@ from verixa_runtime.triad import (
     TriadOrchestrator,
     VerdictDecision,
 )
-
 
 _WF_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
 _TENANT_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")

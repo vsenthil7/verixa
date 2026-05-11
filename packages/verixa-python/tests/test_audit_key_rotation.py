@@ -25,11 +25,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
-
 from verixa_runtime.audit.emitter import (
     AuditEmitInput,
     AuditEmitRecord,
@@ -44,7 +43,6 @@ from verixa_runtime.crypto.key_bootstrap import (
     TenantKeyBundle,
     bootstrap_tenant,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures + helpers
@@ -130,7 +128,7 @@ def _build_two_key_chain(
     """Emit `pre_rotation_count` entries under bundle_a then
     `post_rotation_count` entries under bundle_b. Hash chain unbroken."""
     persisted: list[PersistedAuditEntry] = []
-    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc)
+    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC)
     prev: bytes | None = None
     seq = 0
 
@@ -208,7 +206,7 @@ def test_three_key_chain_verifies(
 ) -> None:
     """Two rotations: Key A -> Key B -> Key C. Hash chain unbroken."""
     persisted: list[PersistedAuditEntry] = []
-    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc)
+    base_time = datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC)
     prev: bytes | None = None
     seq = 0
 

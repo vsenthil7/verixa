@@ -31,7 +31,6 @@ from verixa_control_plane.envelopes import (  # noqa: F401
     WorkflowSummary,
 )
 
-
 __version__ = "0.1.0"
 
 

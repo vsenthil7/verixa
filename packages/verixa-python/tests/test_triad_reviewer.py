@@ -26,7 +26,6 @@ from typing import Any
 
 import httpx
 import pytest
-
 from verixa_runtime.triad import (
     MockReviewer,
     OpenAICompatReviewer,
@@ -41,7 +40,6 @@ from verixa_runtime.triad.reviewer import (
     _parse_chat_completion_text,
     _verdict_from_payload,
 )
-
 
 # Note: pyproject.toml configures pytest-asyncio mode='auto' so async
 # def tests run automatically without an explicit marker. We do NOT

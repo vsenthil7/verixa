@@ -9,14 +9,12 @@ import os
 from pathlib import Path
 
 import pytest
-
 from verixa_runtime.config import (
     DOTENV_FILENAME,
     find_dotenv,
     load_dotenv,
     parse_dotenv_text,
 )
-
 
 # ---------------------------------------------------------------------------
 # parse_dotenv_text -- pure parser

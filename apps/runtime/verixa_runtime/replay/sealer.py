@@ -38,16 +38,18 @@ from verixa_runtime.crypto.aes_gcm import (
     AesGcmCiphertext,
     AesGcmDecryptionError,
     AesGcmKey,
+)
+from verixa_runtime.crypto.aes_gcm import (
     decrypt as aes_decrypt,
+)
+from verixa_runtime.crypto.aes_gcm import (
     encrypt as aes_encrypt,
 )
 from verixa_runtime.replay.bundle import (
-    BUNDLE_SCHEMA_VERSION,
     ReplayBundle,
     canonicalise_bundle,
     deserialise_bundle,
 )
-
 
 # Length of the content-addressable storage key (hex of SHA-256).
 STORAGE_KEY_HEX_LEN: Final[int] = 64

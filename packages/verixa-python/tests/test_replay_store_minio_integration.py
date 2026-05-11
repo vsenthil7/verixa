@@ -15,7 +15,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from verixa_runtime.crypto.aes_gcm import generate_key
 from verixa_runtime.replay import (
     BundleNotFound,
@@ -24,7 +23,6 @@ from verixa_runtime.replay import (
     decrypt_bundle,
     encrypt_bundle,
 )
-
 
 pytestmark = pytest.mark.integration
 

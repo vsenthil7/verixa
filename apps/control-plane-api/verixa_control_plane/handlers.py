@@ -26,7 +26,9 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Callable, Protocol
+from collections.abc import Callable
+from datetime import UTC
+from typing import Protocol
 
 from verixa_runtime.crypto.aes_gcm import AesGcmDecryptionError
 from verixa_runtime.crypto.ed25519 import Ed25519KeyPair
@@ -38,8 +40,8 @@ from verixa_runtime.dossier import (
 )
 from verixa_runtime.replay import (
     BundleNotFound,
-    ReplayBundle,
     Reconstructor,
+    ReplayBundle,
 )
 from verixa_runtime.replay.snapshotter import AuditIndexMiss
 
@@ -51,7 +53,6 @@ from verixa_control_plane.envelopes import (
     ReplayRequest,
     ReplayResponse,
 )
-
 
 # ---------------------------------------------------------------------------
 # Dossier-store interface (Phase-0: in-memory)
@@ -184,8 +185,8 @@ async def handle_replay(
         return 404, ErrorResponse(
             error="bundle_not_found",
             message=(
-                f"index pointed at a storage key the bundle store "
-                f"does not have (was the bundle physically deleted?)"
+                "index pointed at a storage key the bundle store "
+                "does not have (was the bundle physically deleted?)"
             ),
             audit_id=req.audit_id,
         )
@@ -309,9 +310,9 @@ def _default_action_summary(bundle: ReplayBundle) -> str:
 
 def _ts_ns_to_datetime(ts_ns: int):
     """Render nanoseconds-since-epoch as timezone-aware UTC datetime."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
-    return datetime.fromtimestamp(ts_ns / 1_000_000_000, tz=timezone.utc)
+    return datetime.fromtimestamp(ts_ns / 1_000_000_000, tz=UTC)
 
 
 # ---------------------------------------------------------------------------

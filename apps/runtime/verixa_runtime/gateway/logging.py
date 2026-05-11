@@ -29,7 +29,7 @@ import logging
 import time
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Final
 
 from fastapi import Request
@@ -83,7 +83,7 @@ class JsonLogFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         ts = (
-            datetime.fromtimestamp(record.created, tz=timezone.utc)
+            datetime.fromtimestamp(record.created, tz=UTC)
             .isoformat(timespec="microseconds")
             .replace("+00:00", "Z")
         )

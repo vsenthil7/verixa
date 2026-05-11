@@ -10,7 +10,6 @@ import hashlib
 import uuid
 
 import pytest
-
 from verixa_runtime.crypto.aes_gcm import KEY_BYTES as AES_KEY_BYTES
 from verixa_runtime.crypto.aes_gcm import AesGcmKey, decrypt, encrypt
 from verixa_runtime.crypto.ed25519 import (
@@ -24,7 +23,6 @@ from verixa_runtime.crypto.key_bootstrap import (
     bootstrap_tenant,
     derive_signing_key_id,
 )
-
 
 # ---------------------------------------------------------------------------
 # derive_signing_key_id

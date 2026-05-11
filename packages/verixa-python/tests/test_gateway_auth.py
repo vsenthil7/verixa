@@ -10,7 +10,6 @@ import uuid
 
 import pytest
 from fastapi.testclient import TestClient
-
 from verixa_runtime.app import create_app
 from verixa_runtime.gateway.auth import (
     API_KEY_HEADER,
@@ -18,7 +17,6 @@ from verixa_runtime.gateway.auth import (
     ENV_VAR_NAME,
     parse_api_key_env,
 )
-
 
 # ---------------------------------------------------------------------------
 # parse_api_key_env

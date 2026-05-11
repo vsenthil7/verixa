@@ -10,9 +10,7 @@ import asyncio
 import uuid
 
 import pytest
-
 from verixa_runtime.crypto.aes_gcm import (
-    AesGcmCiphertext,
     generate_key,
 )
 from verixa_runtime.replay import (
@@ -24,7 +22,6 @@ from verixa_runtime.replay import (
     ReplayBundle,
     encrypt_bundle,
 )
-
 
 _TENANT_ID = uuid.UUID("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
 _AUDIT_ID = uuid.UUID("11111111-2222-3333-4444-555555555555")

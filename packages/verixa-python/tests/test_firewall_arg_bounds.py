@@ -11,7 +11,6 @@ from typing import Any
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
 from verixa_runtime.firewall import (
     CODE_ARG_ARRAY_SIZE,
     CODE_ARG_ENUM,

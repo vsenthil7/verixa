@@ -9,7 +9,6 @@ from __future__ import annotations
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
-
 from verixa_runtime.crypto.aes_gcm import (
     KEY_BYTES,
     NONCE_BYTES,
@@ -21,7 +20,6 @@ from verixa_runtime.crypto.aes_gcm import (
     encrypt,
     generate_key,
 )
-
 
 # ---------------------------------------------------------------------------
 # Constants

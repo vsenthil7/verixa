@@ -24,10 +24,10 @@ Layers:
 from __future__ import annotations
 
 import uuid
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import pytest
-
 from verixa_runtime.triad import (
     Commitment,
     ConsensusKind,
@@ -41,7 +41,6 @@ from verixa_runtime.triad import (
     VerdictDecision,
     consensus_to_decision,
 )
-
 
 _AUDIT_ID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 

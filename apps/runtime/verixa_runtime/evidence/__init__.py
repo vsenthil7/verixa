@@ -12,7 +12,6 @@ from verixa_runtime.evidence.validator import (  # noqa: F401
     validate_evidence,
 )
 
-
 __all__ = [
     "GROUND_THRESHOLD",
     "EvidenceCheck",

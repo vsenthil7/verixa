@@ -10,12 +10,10 @@ Smoke + integration tests:
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 
 import pytest
 from fastapi.testclient import TestClient
-
-from verixa_runtime.dossier import verify_signed_dossier
-
 from verixa_control_plane.demo_seed import (
     DemoSeedResult,
     seed_financial_services_demo,
@@ -24,6 +22,7 @@ from verixa_control_plane.routes import (
     build_default_state,
     create_app_with_state,
 )
+from verixa_runtime.dossier import verify_signed_dossier
 
 
 async def test_seed_runs_to_completion() -> None:
@@ -52,15 +51,15 @@ async def test_seed_creates_four_tools() -> None:
 async def test_seed_creates_three_audit_entries() -> None:
     """Each of the three decisions lands in both the snapshotter
     (for replay) and the audit ledger (for query)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     state = build_default_state()
     result = await seed_financial_services_demo(state)
     # Query all three across a wide window.
     all_entries = await state.audit_ledger.query(
         workflow_id=result.workflow_id,
-        from_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
-        to_timestamp=datetime(2026, 12, 31, tzinfo=timezone.utc),
+        from_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
+        to_timestamp=datetime(2026, 12, 31, tzinfo=UTC),
     )
     assert len(all_entries) == 3
     decisions = {e.decision for e in all_entries}

@@ -25,7 +25,7 @@ import asyncio
 import logging
 import time
 import uuid
-from typing import Iterable
+from collections.abc import Iterable
 
 from fastapi import APIRouter
 
@@ -53,7 +53,6 @@ from verixa_runtime.triad.orchestrator import (
     consensus_to_decision,
 )
 from verixa_runtime.triad.protocol import VerdictDecision
-
 
 router = APIRouter(prefix="/v1/runtime", tags=["runtime"])
 

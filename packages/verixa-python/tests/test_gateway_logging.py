@@ -13,9 +13,8 @@ import logging
 import uuid
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
 from verixa_runtime.app import create_app
 from verixa_runtime.gateway.logging import (
     LOGGER_NAME,
@@ -23,7 +22,6 @@ from verixa_runtime.gateway.logging import (
     JsonLogFormatter,
     StructuredLoggingMiddleware,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures

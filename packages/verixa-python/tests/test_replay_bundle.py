@@ -17,7 +17,6 @@ import json
 import uuid
 
 import pytest
-
 from verixa_runtime.replay import (
     BUNDLE_SCHEMA_VERSION,
     PolicyEvaluationRecord,
@@ -26,7 +25,6 @@ from verixa_runtime.replay import (
     canonicalise_bundle,
     deserialise_bundle,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

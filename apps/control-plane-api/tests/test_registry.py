@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
-
 from verixa_control_plane.envelopes import (
     AgentRegisterRequest,
     AgentRegisterResponse,
@@ -27,8 +26,7 @@ from verixa_control_plane.registry import (
     handle_workflow_register,
 )
 
-
-_NOW = datetime(2026, 5, 11, 0, 0, tzinfo=timezone.utc)
+_NOW = datetime(2026, 5, 11, 0, 0, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------
@@ -64,12 +62,12 @@ async def test_workflow_register_uses_default_now_when_none() -> None:
     import datetime as dt_mod
 
     wf_reg = InMemoryWorkflowRegistry()
-    before = dt_mod.datetime.now(dt_mod.timezone.utc)
+    before = dt_mod.datetime.now(dt_mod.UTC)
     status, body = await handle_workflow_register(
         WorkflowRegisterRequest(name="x"),
         workflow_registry=wf_reg,
     )
-    after = dt_mod.datetime.now(dt_mod.timezone.utc)
+    after = dt_mod.datetime.now(dt_mod.UTC)
     assert status == 200
     assert before <= body.created_at <= after
 
@@ -203,7 +201,7 @@ async def test_agent_register_uses_default_now() -> None:
         workflow_registry=wf_reg,
         now=_NOW,
     )
-    before = dt_mod.datetime.now(dt_mod.timezone.utc)
+    before = dt_mod.datetime.now(dt_mod.UTC)
     _, body = await handle_agent_register(
         AgentRegisterRequest(
             workflow_id=wf_body.workflow_id,
@@ -213,7 +211,7 @@ async def test_agent_register_uses_default_now() -> None:
         workflow_registry=wf_reg,
         agent_registry=agent_reg,
     )
-    after = dt_mod.datetime.now(dt_mod.timezone.utc)
+    after = dt_mod.datetime.now(dt_mod.UTC)
     assert isinstance(body, AgentRegisterResponse)
     assert before <= body.created_at <= after
 
@@ -284,12 +282,12 @@ async def test_tool_register_uses_default_now() -> None:
 
     wf_reg = InMemoryWorkflowRegistry()
     tool_reg = InMemoryToolRegistry()
-    before = dt_mod.datetime.now(dt_mod.timezone.utc)
+    before = dt_mod.datetime.now(dt_mod.UTC)
     _, body = await handle_tool_register(
         ToolRegisterRequest(name="t"),
         workflow_registry=wf_reg,
         tool_registry=tool_reg,
     )
-    after = dt_mod.datetime.now(dt_mod.timezone.utc)
+    after = dt_mod.datetime.now(dt_mod.UTC)
     assert isinstance(body, ToolRegisterResponse)
     assert before <= body.created_at <= after

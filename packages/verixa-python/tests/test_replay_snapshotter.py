@@ -10,13 +10,11 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
 from verixa_runtime.crypto.aes_gcm import AesGcmKey, generate_key
 from verixa_runtime.replay import (
     AuditIndexConflict,
     AuditIndexMiss,
     BundleNotFound,
-    EncryptedBundle,
     InMemoryAuditIndex,
     InMemoryBundleStore,
     PolicyEvaluationRecord,
@@ -25,7 +23,6 @@ from verixa_runtime.replay import (
     Snapshotter,
     TriadReviewRecord,
 )
-
 
 _TENANT_ID = uuid.UUID("12121212-1212-1212-1212-121212121212")
 _AUDIT_ID = uuid.UUID("34343434-3434-3434-3434-343434343434")

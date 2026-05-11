@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
 import pytest
-
 from verixa_runtime.policy import client as client_module
 from verixa_runtime.policy.cache import (
     CACHE_KEY_PREFIX,
@@ -33,7 +31,6 @@ from verixa_runtime.policy.client import (
     PolicyDecision,
     PolicyDecisionKind,
 )
-
 
 # ---------------------------------------------------------------------------
 # In-memory RedisLike stub
@@ -271,7 +268,7 @@ def test_coerce_payload_decodes_utf8_bytes() -> None:
 
 
 def test_coerce_payload_decodes_utf8_with_unicode() -> None:
-    assert _coerce_payload_to_str("héllo".encode("utf-8")) == "héllo"
+    assert _coerce_payload_to_str("héllo".encode()) == "héllo"
 
 
 def test_coerce_payload_rejects_invalid_utf8() -> None:

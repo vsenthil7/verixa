@@ -37,7 +37,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 _strict = ConfigDict(extra="forbid", frozen=False)
 
 

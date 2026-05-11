@@ -46,6 +46,8 @@ from verixa_runtime.gateway.govern import (  # noqa: F401
     decide_via_router_with_replay,
     decide_via_router_with_triad,
     pending_snapshot_tasks,
+)
+from verixa_runtime.gateway.govern import (
     router as govern_router,
 )
 from verixa_runtime.gateway.logging import (  # noqa: F401

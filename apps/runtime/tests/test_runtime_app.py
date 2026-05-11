@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-
 from verixa_runtime import __version__
 from verixa_runtime.app import SERVICE_NAME, app, create_app
 

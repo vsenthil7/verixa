@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-
 from verixa_control_plane import __version__
 from verixa_control_plane.app import SERVICE_NAME, app, create_app
 
