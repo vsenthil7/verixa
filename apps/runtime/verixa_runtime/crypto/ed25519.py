@@ -74,7 +74,7 @@ def sign(private_key: bytes, message: bytes) -> bytes:
             f"private_key must be {PRIVATE_KEY_BYTES} bytes, "
             f"got {len(private_key)}"
         )
-    if not isinstance(message, (bytes, bytearray)):
+    if not isinstance(message, bytes | bytearray):
         raise TypeError(
             f"message must be bytes-like, got {type(message).__name__}"
         )
@@ -99,7 +99,7 @@ def verify(public_key: bytes, message: bytes, signature: bytes) -> None:
             f"signature must be {SIGNATURE_BYTES} bytes, "
             f"got {len(signature)}"
         )
-    if not isinstance(message, (bytes, bytearray)):
+    if not isinstance(message, bytes | bytearray):
         raise TypeError(
             f"message must be bytes-like, got {type(message).__name__}"
         )

@@ -93,11 +93,11 @@ def encrypt(
     fails authentication under nonce reuse. We don't expose nonce
     selection to callers for that reason.
     """
-    if not isinstance(plaintext, (bytes, bytearray)):
+    if not isinstance(plaintext, bytes | bytearray):
         raise TypeError(
             f"plaintext must be bytes-like, got {type(plaintext).__name__}"
         )
-    if not isinstance(associated_data, (bytes, bytearray)):
+    if not isinstance(associated_data, bytes | bytearray):
         raise TypeError(
             "associated_data must be bytes-like, got "
             f"{type(associated_data).__name__}"

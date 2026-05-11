@@ -150,7 +150,7 @@ def _check(value: Any, schema: dict[str, Any], path: list) -> _Failure | None:
         return _check_numeric_bounds(value, schema, path)
 
     if declared == "number":
-        if isinstance(value, bool) or not isinstance(value, (int, float)):
+        if isinstance(value, bool) or not isinstance(value, int | float):
             return _Failure(
                 path=_fmt_path(path),
                 code=CODE_ARG_TYPE,

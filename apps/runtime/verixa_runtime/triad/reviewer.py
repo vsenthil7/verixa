@@ -177,7 +177,7 @@ def _verdict_from_payload(
             f"unknown decision value {decision_raw!r}; "
             f"expected one of {[d.value for d in VerdictDecision]}"
         ) from e
-    if not isinstance(confidence_raw, (int, float)) or isinstance(
+    if not isinstance(confidence_raw, int | float) or isinstance(
         confidence_raw, bool
     ):
         raise ReviewerError(
