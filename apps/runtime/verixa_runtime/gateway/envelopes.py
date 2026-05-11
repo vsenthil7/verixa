@@ -1,6 +1,6 @@
 """Pydantic v2 envelopes for the Runtime Gateway.
 
-Maps directly to docs/05_api/API_SPECIFICATION.md A7 2.1. Phase 0 implements
+Maps directly to docs/08_api_specification/API_SPECIFICATION.md A7 2.1. Phase 0 implements
 the canonical /v1/runtime/govern shapes (request + allow/deny/escalate
 response variants). The envelope is intentionally additive-only on
 non-required fields so CP-9 (decision router) can extend it without

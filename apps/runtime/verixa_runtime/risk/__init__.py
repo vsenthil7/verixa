@@ -35,7 +35,7 @@ Phase 0 -- CP-15 wires it into rate-limit weighting):
   - Firewall deny adds 0.50 (terminal)
   - Capped at 1.0
 
-Risk classification (matches docs/05_api 'risk_classification' field):
+Risk classification (matches docs/08_api_specification 'risk_classification' field):
 
   >= 0.80 -> CRITICAL
   >= 0.50 -> HIGH

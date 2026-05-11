@@ -2,7 +2,7 @@
 
 CP-2.5 ships only the operational endpoints (parallel to the Runtime
 Gateway). CP-14 will add the workflow / agent / audit / replay / dossier
-routes per docs/05_api/API_SPECIFICATION.md §3.
+routes per docs/08_api_specification/API_SPECIFICATION.md §3.
 """
 
 from __future__ import annotations

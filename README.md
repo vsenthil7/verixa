@@ -6,7 +6,7 @@
 > that the action was governed.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Phase](https://img.shields.io/badge/phase-0%20%E2%80%94%20hackathon%20prototype-blue)](docs/10_build_plan/BUILD_PLAN.md)
+[![Phase](https://img.shields.io/badge/phase-0%20%E2%80%94%20hackathon%20prototype-blue)](docs/15_build_plan/BUILD_PLAN.md)
 [![Track](https://img.shields.io/badge/track-AI%20Agents%20%26%20Agentic%20Workflows-purple)]()
 [![GPU](https://img.shields.io/badge/GPU-AMD%20MI300X%20%2B%20ROCm-red)]()
 [![Tests](https://img.shields.io/badge/tests-1055%20pytest%20%2B%2035%20vitest%20%2B%2018%20playwright-brightgreen)]()
@@ -99,7 +99,7 @@ Risk Engine, Drift Monitor, Trust Graph, Bench, Hallmark, Forge, Replica,
 Mesh, WET Ops) are **architecturally present but not implemented** in
 Phase 0.
 
-Full architecture: [`docs/04_architecture/ARCHITECTURE.md`](docs/04_architecture/ARCHITECTURE.md)
+Full architecture: [`docs/07_system_architecture/SYSTEM_ARCHITECTURE.md`](docs/07_system_architecture/SYSTEM_ARCHITECTURE.md)
 
 ---
 
@@ -207,11 +207,14 @@ CI: GitHub Actions runs all three suites on every push and pull request to
 The full architecture and operations pack lives under [`docs/`](docs/).
 Highlights for first-time readers:
 
-- [`docs/02_use_cases/USE_CASES.md`](docs/02_use_cases/USE_CASES.md) — **10 working use cases with sequence diagrams**, all exercised by the seeded demo
-- [`docs/04_architecture/ARCHITECTURE.md`](docs/04_architecture/ARCHITECTURE.md) — 24 modules, 4 groups, dependency graph
-- [`docs/09_evidence_pack/EVIDENCE_PACK_SPEC.md`](docs/09_evidence_pack/EVIDENCE_PACK_SPEC.md) — dossier structure, signing, offline verification
-- [`docs/12_security_compliance/SECURITY_COMPLIANCE.md`](docs/12_security_compliance/SECURITY_COMPLIANCE.md) — threat model, EU AI Act / GDPR mapping
-- [`docs/17_glossary/GLOSSARY.md`](docs/17_glossary/GLOSSARY.md) — terms of art and compliance-language hardening rules
+- [`docs/02_brd/BRD.md`](docs/02_brd/BRD.md) — business requirements (BR-01 → BR-08) with acceptance criteria
+- [`docs/05_use_cases_and_user_stories/USE_CASES.md`](docs/05_use_cases_and_user_stories/USE_CASES.md) — **10 working use cases with sequence diagrams**, all exercised by the seeded demo
+- [`docs/05_use_cases_and_user_stories/USER_STORIES.md`](docs/05_use_cases_and_user_stories/USER_STORIES.md) — job-stories format (US-01 → US-10)
+- [`docs/07_system_architecture/SYSTEM_ARCHITECTURE.md`](docs/07_system_architecture/SYSTEM_ARCHITECTURE.md) — 24 modules, 4 groups, dependency graph
+- [`docs/12_evidence_pack_spec/EVIDENCE_PACK_SPECIFICATION.md`](docs/12_evidence_pack_spec/EVIDENCE_PACK_SPECIFICATION.md) — dossier structure, signing, offline verification
+- [`docs/11_threat_model/THREAT_MODEL.md`](docs/11_threat_model/THREAT_MODEL.md) + [`docs/06_regulatory_mapping/REGULATORY_MAPPING_MATRIX.md`](docs/06_regulatory_mapping/REGULATORY_MAPPING_MATRIX.md) — threat model, EU AI Act / GDPR mapping
+- [`docs/17_traceability_matrix/TRACEABILITY_MATRIX.md`](docs/17_traceability_matrix/TRACEABILITY_MATRIX.md) — BR → UC → Test → Code mapping
+- [`docs/20_glossary/GLOSSARY.md`](docs/20_glossary/GLOSSARY.md) — terms of art and compliance-language hardening rules
 
 ---
 
@@ -227,7 +230,7 @@ Annex IV-aligned runtime technical dossier on demand.
 The distinction matters for buyers and for regulators. The README, source
 comments, demo script, and submission materials are all written under
 this hardened-language discipline. See
-[`docs/17_glossary/GLOSSARY.md`](docs/17_glossary/GLOSSARY.md) for the
+[`docs/20_glossary/GLOSSARY.md`](docs/20_glossary/GLOSSARY.md) for the
 full rule set.
 
 ---

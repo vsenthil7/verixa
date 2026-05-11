@@ -11,7 +11,7 @@ DB, no Redis). The gateway layer in CP-9.2 wires it up by:
 
 The router returns a fully-populated GovernResponse including audit_id,
 latency_ms placeholder (gateway substitutes the real number), and
-policy/risk fields shaped per docs/05_api A7 2.1.
+policy/risk fields shaped per docs/08_api_specification A7 2.1.
 """
 
 from __future__ import annotations

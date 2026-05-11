@@ -1,6 +1,6 @@
 """Verixa review schema (`verixa_review`) — triad reviews + human reviews.
 
-Per docs/06_data_model/DATA_MODEL.md §7.
+Per docs/09_data_model/DATA_MODEL.md §7.
 
 The triad_reviews table carries the columns for the hash-commit-and-reveal
 protocol that CP-10 (Triad Review Engine) implements:
@@ -38,7 +38,7 @@ SCHEMA_NAME = "verixa_review"
 class TriadReview(Base):
     """One Triad Review Engine record per audit_id.
 
-    See docs/05_api/API_SPECIFICATION.md and CP-10 implementation for the
+    See docs/08_api_specification/API_SPECIFICATION.md and CP-10 implementation for the
     commit-and-reveal protocol that populates these columns.
     """
 

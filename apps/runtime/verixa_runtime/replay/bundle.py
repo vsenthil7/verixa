@@ -5,7 +5,7 @@ governed action. It is the unit of replay -- everything a third
 party (auditor, regulator, internal reviewer) needs to reconstruct
 "what the system saw and why it decided what it did" lives in here.
 
-Phase-0 fields (mirrors docs/06_data_model/DATA_MODEL.md replay
+Phase-0 fields (mirrors docs/09_data_model/DATA_MODEL.md replay
 schema):
 
   - schema_version          -- monotonic int; bumped when fields

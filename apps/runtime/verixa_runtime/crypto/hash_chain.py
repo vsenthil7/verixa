@@ -1,6 +1,6 @@
 """SHA-256 hash chain — audit-ledger integrity.
 
-Per docs/06_data_model/DATA_MODEL.md §5.2:
+Per docs/09_data_model/DATA_MODEL.md §5.2:
 
     hash_chain_self = sha256(
         sequence_number || event_time || workflow_id || agent_id ||

@@ -1,6 +1,6 @@
 """Verixa registry schema (`verixa_registry`) — agents, workflows, models, tools.
 
-Per docs/06_data_model/DATA_MODEL.md §3.
+Per docs/09_data_model/DATA_MODEL.md §3.
 
 Notes on Phase 0 simplifications:
   - workflows.triad_policy_id and escalation_policy_id are NOT FKs in

@@ -1,6 +1,6 @@
 """Verixa audit ledger schema (`verixa_audit`) — hash-chained + Ed25519-signed.
 
-Per docs/06_data_model/DATA_MODEL.md §5.
+Per docs/09_data_model/DATA_MODEL.md §5.
 
 The audit ledger is the single most important schema in Verixa. Every
 governed action emits exactly one entry. The `hash_chain_self` of each

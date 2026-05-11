@@ -1,6 +1,6 @@
 """POST /v1/chat/completions — OpenAI-compatible proxy to vLLM-on-ROCm.
 
-Per docs/05_api/API_SPECIFICATION.md A7 2.1, this endpoint accepts an
+Per docs/08_api_specification/API_SPECIFICATION.md A7 2.1, this endpoint accepts an
 OpenAI ChatCompletions request and proxies it to the configured vLLM
 endpoint (Phase 0: live MI300X droplet at http://165.245.133.120:8000).
 

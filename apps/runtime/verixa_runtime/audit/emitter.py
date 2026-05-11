@@ -1,6 +1,6 @@
 """Audit-ledger emit — produce a signed, hash-chained record.
 
-Per docs/06_data_model/DATA_MODEL.md §5: every governed action emits a
+Per docs/09_data_model/DATA_MODEL.md §5: every governed action emits a
 single row into `verixa_audit.audit_entries` with fixed integrity columns:
 
   - sequence_number       : strictly monotonic per-tenant

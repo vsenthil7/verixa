@@ -1,6 +1,6 @@
 """Verixa dossier schema (`verixa_dossier`) — compliance evidence packs.
 
-Per docs/06_data_model/DATA_MODEL.md §8.
+Per docs/09_data_model/DATA_MODEL.md §8.
 
 A dossier is a generated compliance pack that bundles audit entries +
 metadata into a PDF + machine-readable JSON. The `hash_chain_proof`
@@ -9,7 +9,7 @@ verifier can confirm the dossier corresponds to a verifiable range of
 the underlying audit ledger without re-querying.
 
 Phase 0 implements the per-decision pack only. Per-workflow / Annex IV
-/ Article 72 packs come in Phase 1 (per docs/10_build_plan/BUILD_PLAN.md).
+/ Article 72 packs come in Phase 1 (per docs/15_build_plan/BUILD_PLAN.md).
 """
 
 from __future__ import annotations

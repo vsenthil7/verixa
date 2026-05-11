@@ -1,6 +1,6 @@
 """Verixa replay schema (`verixa_replay`) — index for snapshot bundles.
 
-Per docs/06_data_model/DATA_MODEL.md §6.
+Per docs/09_data_model/DATA_MODEL.md §6.
 
 Each row points at one encrypted snapshot bundle in the object store
 (MinIO in dev; S3-compatible in production). The bundle itself is

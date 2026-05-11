@@ -4,7 +4,7 @@ Reads a JSON export of `verixa_audit.audit_entries` (joined with
 `verixa_audit.signing_keys` so each row carries its `public_key`) and
 walks the chain via `verify_audit_chain`.
 
-The export format is documented in docs/09_evidence_pack_spec/
+The export format is documented in docs/12_evidence_pack_spec/
 EVIDENCE_PACK_SPECIFICATION.md §2.1; CP-13 ships a generator. This CLI
 is the consumer side: it can be run by an external auditor with no
 network access to the Verixa runtime — only the JSON file is needed.

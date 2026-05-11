@@ -1,6 +1,6 @@
 """Verixa policy schema (`verixa_policy`) — policies + policy test fixtures.
 
-Per docs/06_data_model/DATA_MODEL.md §4.
+Per docs/09_data_model/DATA_MODEL.md §4.
 """
 
 from __future__ import annotations

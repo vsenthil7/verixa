@@ -1,6 +1,6 @@
 """pytest suite for CP-5.4 — key-rotation continuity.
 
-The audit ledger doc (docs/06_data_model A7 5.3) specifies that signing
+The audit ledger doc (docs/09_data_model A7 5.3) specifies that signing
 keys are versioned. An audit chain can have entries signed by Key A
 (rows 0..N) followed by entries signed by Key B (rows N+1..) — as long
 as each entry's signature verifies under the public key for ITS OWN

@@ -10,7 +10,7 @@ Three primitives ship in this package, each in its own module:
 Plus a key-bootstrap utility for dev-mode tenant key-pair generation
 (production uses HashiCorp Vault transit / customer-supplied KMS).
 
-Design rules (carried from docs/06_data_model + docs/07_threat_model):
+Design rules (carried from docs/09_data_model + docs/11_threat_model):
 
 1. **Determinism where possible:** signature/hash functions take bytes,
    return bytes; no implicit time, no implicit RNG, no implicit globals

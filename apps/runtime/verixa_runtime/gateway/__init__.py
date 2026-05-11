@@ -1,6 +1,6 @@
 """Verixa Runtime Gateway — hot-path governance endpoints.
 
-Two endpoints per docs/05_api/API_SPECIFICATION.md A7 2.1:
+Two endpoints per docs/08_api_specification/API_SPECIFICATION.md A7 2.1:
 
   - POST /v1/runtime/govern        — primary governed-action endpoint
   - POST /v1/chat/completions      — OpenAI-compatible proxy variant

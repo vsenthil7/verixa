@@ -1,6 +1,6 @@
 """AES-256-GCM encrypt/decrypt — Replay Vault snapshot encryption.
 
-Per docs/06_data_model/DATA_MODEL.md §6 + docs/11_security_architecture:
+Per docs/09_data_model/DATA_MODEL.md §6 + docs/10_security_architecture:
 
 - Snapshot bundles are AES-256-GCM encrypted before upload to object store
 - Per-tenant data encryption keys (DEK), derived/wrapped under a per-tenant

@@ -36,7 +36,7 @@ class PolicyBundleError(ValueError):
 
 
 class PolicyTestExpected(str, Enum):
-    """Expected outcome of a policy fixture (matches docs/06_data_model A7 4.2)."""
+    """Expected outcome of a policy fixture (matches docs/09_data_model A7 4.2)."""
 
     PASS = "pass"
     FAIL = "fail"

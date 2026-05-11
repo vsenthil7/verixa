@@ -4,7 +4,7 @@ Every schema-namespace module imports `metadata` from here and declares
 its `Table` / `DeclarativeBase` objects against it. Alembic env.py uses
 this single MetaData for autogenerate.
 
-Schema namespace map (per docs/06_data_model/DATA_MODEL.md §2):
+Schema namespace map (per docs/09_data_model/DATA_MODEL.md §2):
   verixa_tenancy   — tenants, signing-key registry pointer
   verixa_registry  — agents, workflows, models, tools
   verixa_policy    — policies, policy_test_fixtures
