@@ -176,10 +176,13 @@ def test_top_level_imports_resolve() -> None:
 
 
 def test_all_lists_match_advertised_symbols() -> None:
-    """The __all__ list pins the wildcard-import surface."""
+    """The __all__ list pins the wildcard-import surface.
+
+    CP-61 added 6 envelope dataclass exports (typed response models)."""
     import verixa
 
     expected = {
+        # Resource clients (8) + base client (1) + exceptions (3) = 12 (CP-50)
         "AgentsClient",
         "AuditClient",
         "BundlesClient",
@@ -192,6 +195,13 @@ def test_all_lists_match_advertised_symbols() -> None:
         "VerixaHttpError",
         "WebhooksClient",
         "WorkflowsClient",
+        # Typed envelope dataclasses (6) added by CP-61
+        "AuditEntry",
+        "AuditQueryResponse",
+        "InvalidEnvelopeError",
+        "WorkflowListResponse",
+        "WorkflowRegisterResponse",
+        "WorkflowSummary",
     }
     assert set(verixa.__all__) == expected
 

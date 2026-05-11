@@ -13,6 +13,14 @@ __version__ = "0.1.0"
 __author__ = "v_sen"
 __license__ = "MIT"
 
+from verixa.envelopes import (
+    AuditEntry,
+    AuditQueryResponse,
+    InvalidEnvelopeError,
+    WorkflowListResponse,
+    WorkflowRegisterResponse,
+    WorkflowSummary,
+)
 from verixa.sdk import (
     AgentsClient,
     AuditClient,
@@ -31,8 +39,11 @@ from verixa.sdk import (
 __all__ = [
     "AgentsClient",
     "AuditClient",
+    "AuditEntry",
+    "AuditQueryResponse",
     "BundlesClient",
     "DossierClient",
+    "InvalidEnvelopeError",
     "ReplayClient",
     "ToolsClient",
     "VerixaClient",
@@ -40,5 +51,8 @@ __all__ = [
     "VerixaError",
     "VerixaHttpError",
     "WebhooksClient",
+    "WorkflowListResponse",
+    "WorkflowRegisterResponse",
+    "WorkflowSummary",
     "WorkflowsClient",
 ]
