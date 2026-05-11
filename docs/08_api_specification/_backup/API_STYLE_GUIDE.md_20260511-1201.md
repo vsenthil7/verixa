@@ -34,50 +34,6 @@ This is a working document for Phase 0 endpoints (`/v1/control/*`). Phase 1 addi
 - **Booleans are `true` / `false`.** Never `0`/`1` or `"yes"`/`"no"`.
 - **Nullable fields are explicit.** The schema declares which fields can be `null`; absence ≠ null.
 
-## 3.5. Field caps (input validation invariants)
-
-Every Verixa request envelope enforces explicit length caps on string fields. These caps are part of the public API contract and are enforced at the Pydantic validation layer (`apps/runtime/verixa_runtime/gateway/envelopes.py`) — invalid lengths produce `422 validation_error` responses with `details.field` naming the offending key.
-
-**Why caps exist:** size-bomb defence (NEGATIVE_TEST_PLAN §8). An attacker submitting a 1 MB `reasoning_chain_summary` would otherwise inflate the audit ledger row + the replay bundle by 1 MB per decision. Caps make the per-row size deterministic.
-
-**Why caps are documented here, not just in code:** API consumers must know the limits BEFORE sending a request. The OpenAPI spec at `/openapi.json` carries these as `maxLength` per field; this guide is the human-readable summary.
-
-### String length caps (Phase 0)
-
-| Field | Where | min | max | Rationale |
-|---|---|---|---|---|
-| `spiffe_id` | AgentIdentity | 1 | 512 | SPIFFE URI norm; covers `spiffe://trust-domain/path` with deep path hierarchies |
-| `role` | AgentIdentity | 1 | 128 | RBAC role names |
-| `tool_name` | GovernAction | (default null) | 256 | OpenAPI operationId norm |
-| `doc_id` | RetrievedDocument | 1 | 256 | Document store key; capped to prevent path-traversal-via-length |
-| `hash` (content_sha256) | RetrievedDocument | 64 | 64 | Fixed length: SHA-256 hex = 64 chars exactly |
-| `prompt_hash` | GovernContext | 64 | 64 | Fixed length: SHA-256 hex = 64 chars exactly |
-| `model_version` | GovernContext | 1 | 128 | Model identifier + optional version tag |
-| `reasoning_chain_summary` | GovernContext | (default null) | 8192 | 8 KB cap chosen because a meaningful CoT summary fits in 2-3 KB; 8 KB leaves headroom without enabling size bombs |
-| `workflow_state` | GovernContext | (default null) | 128 | State machine label |
-| `trace_id` | GovernRequest | 1 | 128 | Distributed-trace identifier; W3C `traceparent` 55-char + safety margin |
-| `id` | PolicyAppliedResult | 1 | 256 | Policy identifier; matches OPA package-path conventions |
-
-### Numeric range caps
-
-| Field | min | max | Rationale |
-|---|---|---|---|
-| `risk_score` | 0.0 | 1.0 | Closed interval; values outside reject with `validation_error` |
-| `latency_ms` | 0 | (uncapped int) | Non-negative integer; uncapped at API layer (storage layer applies its own cap) |
-| `timestamp_unix_ns` | 0 | (uncapped int) | Non-negative; nanoseconds since epoch |
-
-### Collection caps
-
-| Field | Where | max items | Rationale |
-|---|---|---|---|
-| `retrieved_documents` | GovernContext | (uncapped) | Unbounded by schema; storage layer applies its own cap. Caveat: documented here so API consumers expect "very large arrays canonicalise correctly" (verified by `test_size_limits.py::test_long_array_of_retrieved_documents_canonicalises` for 1000 elements). |
-| `policy_evaluations` | GovernResponse | (uncapped) | Unbounded by schema |
-| `verdicts` / `commitments` in triad | TriadReviewRecord | 3 each | Fixed by triad protocol (3 reviewers) |
-
-### Non-empty invariants (ReplayBundle)
-
-The replay bundle's `retrieved_documents` validator rejects tuples where `doc_id` or `content_sha256_hex` is empty (CP-30.1 commit `d5ca5da` 2026-05-11). Empty strings would mean a hash without an anchor, breaking replay reconstruction. Surfaced by CP-30 negative test as a Phase-1 gap; closed in Phase 0 ahead of schedule.
-
 ## 4. Pagination
 
 - Collection endpoints accept `limit` and `cursor` query params. Cursor is opaque (server-generated; clients don't parse it).
@@ -109,7 +65,7 @@ The replay bundle's `retrieved_documents` validator rejects tuples where `doc_id
 
 | Code | HTTP | Meaning |
 |---|---|---|
-| `validation_error` | 422 | Pydantic / schema validation failed (including field-length-cap violations from §3.5) |
+| `validation_error` | 422 | Pydantic / schema validation failed |
 | `bad_request` | 400 | Well-formed but semantically rejected |
 | `unauthorized` | 401 | Missing or invalid credentials *(Phase 1+)* |
 | `forbidden` | 403 | Authenticated but lacks permission |
@@ -135,13 +91,11 @@ The replay bundle's `retrieved_documents` validator rejects tuples where `doc_id
 - **Additive changes don't bump the version.** Adding optional fields, new endpoints, new enum values: minor.
 - **Removing a field or changing its meaning** is breaking → new `/v2/`.
 - **Deprecated fields** are kept in the response with a `deprecation` warning in the OpenAPI spec for at least one minor release.
-- **Tightening a field cap** (e.g. reducing `reasoning_chain_summary` from 8192 to 4096) is **breaking** if any existing valid input would become invalid → new `/v2/`. **Loosening a cap** (e.g. raising to 16384) is **additive** → minor.
 
 ## 9. OpenAPI
 
 - The Control Plane API auto-generates an OpenAPI 3.1 spec at `/openapi.json` and a Swagger UI at `/docs`.
 - The spec is the single source of truth. Anything not in the spec is not part of the API contract.
-- Field length caps from §3.5 are emitted as `maxLength` / `minLength` constraints in the spec.
 
 ## 10. Examples
 
@@ -158,13 +112,4 @@ Every endpoint in the OpenAPI spec carries at least one request example + one su
 
 - ADR-0005 (Mermaid for diagrams) — separate doc-tooling decision
 - BR-08 (operator surface)
-- BR-02 (input validation) — §3.5 field caps are the executable form of BR-02
 - All `apps/control-plane-api/verixa_control_plane/routes.py` endpoints conform to this guide; enforced by 16 Pydantic envelope tests in `apps/control-plane-api/tests/test_envelopes.py`
-- §3.5 field caps verified by negative tests in `packages/verixa-python/tests/test_size_limits.py` (CP-30) and the ReplayBundle non-empty invariant in `test_empty_doc_id_in_replay_bundle_rejected` + `test_empty_hash_in_replay_bundle_rejected` (CP-30.1 + CP-30.2)
-
-## Change log
-
-| Date | Change | Reference |
-|---|---|---|
-| 2026-05-11 | Added §3.5 documenting all string + numeric + collection field caps; added ReplayBundle non-empty invariant note; added §8 cap-tightening-is-breaking rule; updated §5 to note validation_error covers cap violations; updated §9 to note OpenAPI emits caps as maxLength/minLength | CP-30 RED discovery + CP-30.1/30.2 Phase-1 gap closure |
-| 2026-05-11 09:24 | Initial version landed at CP-29c | `4108850` |
