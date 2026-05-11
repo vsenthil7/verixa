@@ -62,6 +62,9 @@ from verixa.envelopes import (
     DossierGetResponse,
     ReplayResponse,
     ToolRegisterResponse,
+    WebhookDeliveryListResponse,
+    WebhookSubscriptionListResponse,
+    WebhookSubscriptionSummary,
     WorkflowListResponse,
     WorkflowRegisterResponse,
 )
@@ -635,7 +638,35 @@ class BundlesClient(_SubClient):
 
 
 class WebhooksClient(_SubClient):
-    """Webhook subscription management."""
+    """Webhook subscription management.
+
+    CP-79 adds opt-in ``return_typed=True`` overloads on all three
+    methods. Request shapes were already correct in CP-50; this is a
+    pure typed-return addition. v1.0.0 will flip the default per the
+    v0.4.0 deprecation timeline.
+    """
+
+    @overload
+    async def subscribe(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        url: str,
+        event_types: list[str],
+        signing_key_id: str,
+        return_typed: Literal[True],
+    ) -> WebhookSubscriptionSummary: ...
+
+    @overload
+    async def subscribe(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        url: str,
+        event_types: list[str],
+        signing_key_id: str,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def subscribe(
         self,
@@ -644,8 +675,19 @@ class WebhooksClient(_SubClient):
         url: str,
         event_types: list[str],
         signing_key_id: str,
-    ) -> dict[str, Any]:
-        return await _request_json(
+        return_typed: bool = False,
+    ) -> dict[str, Any] | WebhookSubscriptionSummary:
+        """Create a webhook subscription.
+
+        Args:
+            tenant_id: the customer tenant.
+            url: the HTTPS endpoint we POST events to.
+            event_types: non-empty subset of the allowlist (e.g.
+                ``decision.recorded``, ``dossier.generated``).
+            signing_key_id: Vault-tracked key for Ed25519 signatures.
+            return_typed: if True, returns ``WebhookSubscriptionSummary``.
+        """
+        data = await _request_json(
             self._http,
             "POST",
             "/v1/control/webhooks/subscriptions",
@@ -656,29 +698,72 @@ class WebhooksClient(_SubClient):
                 "signing_key_id": signing_key_id,
             },
         )
+        if return_typed:
+            return WebhookSubscriptionSummary.from_dict(data)
+        return data
+
+    @overload
+    async def list_subscriptions(
+        self,
+        *,
+        tenant_id: uuid.UUID | None = ...,
+        return_typed: Literal[True],
+    ) -> WebhookSubscriptionListResponse: ...
+
+    @overload
+    async def list_subscriptions(
+        self,
+        *,
+        tenant_id: uuid.UUID | None = ...,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def list_subscriptions(
-        self, *, tenant_id: uuid.UUID | None = None
-    ) -> dict[str, Any]:
+        self,
+        *,
+        tenant_id: uuid.UUID | None = None,
+        return_typed: bool = False,
+    ) -> dict[str, Any] | WebhookSubscriptionListResponse:
+        """List webhook subscriptions, optionally filtered by tenant_id."""
         params: dict[str, Any] = {}
         if tenant_id is not None:
             params["tenant_id"] = str(tenant_id)
-        return await _request_json(
+        data = await _request_json(
             self._http,
             "GET",
             "/v1/control/webhooks/subscriptions",
             params=params or None,
         )
+        if return_typed:
+            return WebhookSubscriptionListResponse.from_dict(data)
+        return data
+
+    @overload
+    async def recent_deliveries(
+        self, *, limit: int = ..., return_typed: Literal[True]
+    ) -> WebhookDeliveryListResponse: ...
+
+    @overload
+    async def recent_deliveries(
+        self, *, limit: int = ..., return_typed: Literal[False] = ...
+    ) -> dict[str, Any]: ...
 
     async def recent_deliveries(
-        self, *, limit: int = 50
-    ) -> dict[str, Any]:
-        return await _request_json(
+        self,
+        *,
+        limit: int = 50,
+        return_typed: bool = False,
+    ) -> dict[str, Any] | WebhookDeliveryListResponse:
+        """Fetch recent webhook delivery attempts (forensic log)."""
+        data = await _request_json(
             self._http,
             "GET",
             "/v1/control/webhooks/deliveries",
             params={"limit": limit},
         )
+        if return_typed:
+            return WebhookDeliveryListResponse.from_dict(data)
+        return data
 
 
 # ---------------------------------------------------------------------------

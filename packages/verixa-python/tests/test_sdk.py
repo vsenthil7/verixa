@@ -1091,6 +1091,122 @@ async def test_webhooks_recent_deliveries_passes_limit() -> None:
     assert captured["params"]["limit"] == "100"
 
 
+@pytest.mark.asyncio
+async def test_webhooks_subscribe_return_typed_true_returns_dataclass() -> None:
+    """CP-79 opt-in: ``return_typed=True`` returns
+    ``WebhookSubscriptionSummary`` dataclass."""
+    from verixa.envelopes import WebhookSubscriptionSummary
+
+    subscription_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "subscription_id": str(subscription_id),
+                "tenant_id": str(_TENANT),
+                "url": "https://customer.example.com/wh",
+                "event_types": ["decision.recorded", "dossier.generated"],
+                "signing_key_id": "verixa-sig-prod-acme",
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.webhooks.subscribe(
+            tenant_id=_TENANT,
+            url="https://customer.example.com/wh",
+            event_types=["decision.recorded", "dossier.generated"],
+            signing_key_id="verixa-sig-prod-acme",
+            return_typed=True,
+        )
+    assert isinstance(result, WebhookSubscriptionSummary)
+    assert result.subscription_id == subscription_id
+    assert result.tenant_id == _TENANT
+    assert result.signing_key_id == "verixa-sig-prod-acme"
+    # event_types is a tuple (immutable; mirrors CP-64 invariant)
+    assert isinstance(result.event_types, tuple)
+
+
+@pytest.mark.asyncio
+async def test_webhooks_list_subscriptions_return_typed_true_returns_dataclass() -> None:
+    """``return_typed=True`` returns ``WebhookSubscriptionListResponse``
+    with a tuple-of-summaries."""
+    from verixa.envelopes import (
+        WebhookSubscriptionListResponse,
+        WebhookSubscriptionSummary,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "subscriptions": [
+                    {
+                        "subscription_id": str(uuid.uuid4()),
+                        "tenant_id": str(_TENANT),
+                        "url": "https://customer.example.com/wh",
+                        "event_types": ["decision.recorded"],
+                        "signing_key_id": "verixa-sig-prod-acme",
+                        "created_at": "2026-05-11T22:00:00Z",
+                    },
+                ],
+                "total": 1,
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.webhooks.list_subscriptions(return_typed=True)
+    assert isinstance(result, WebhookSubscriptionListResponse)
+    assert result.total == 1
+    assert len(result.subscriptions) == 1
+    assert isinstance(result.subscriptions[0], WebhookSubscriptionSummary)
+    # tuple-not-list immutability
+    assert isinstance(result.subscriptions, tuple)
+
+
+@pytest.mark.asyncio
+async def test_webhooks_recent_deliveries_return_typed_true_returns_dataclass() -> None:
+    """``return_typed=True`` returns ``WebhookDeliveryListResponse``."""
+    from verixa.envelopes import (
+        WebhookDeliveryListResponse,
+        WebhookDeliverySummary,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "deliveries": [
+                    {
+                        "attempt_id": str(uuid.uuid4()),
+                        "subscription_id": str(uuid.uuid4()),
+                        "event_id": str(uuid.uuid4()),
+                        "url": "https://customer.example.com/wh",
+                        "status_code": 200,
+                        "latency_ms": 42,
+                        "attempted_at": "2026-05-11T22:00:00Z",
+                        "error": None,
+                    },
+                ],
+                "total": 1,
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.webhooks.recent_deliveries(return_typed=True)
+    assert isinstance(result, WebhookDeliveryListResponse)
+    assert result.total == 1
+    assert len(result.deliveries) == 1
+    assert isinstance(result.deliveries[0], WebhookDeliverySummary)
+    assert result.deliveries[0].status_code == 200
+    assert result.deliveries[0].error is None
+    assert isinstance(result.deliveries, tuple)
+
+
 # ---------------------------------------------------------------------------
 # Cross-cutting: SDK propagates VerixaHttpError on non-2xx
 # ---------------------------------------------------------------------------
