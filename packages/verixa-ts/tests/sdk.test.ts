@@ -615,15 +615,68 @@ describe('replay', () => {
 });
 
 describe('dossier', () => {
-  it('generate posts audit_id + tenant_id', async () => {
+  // CP-76 wire-format correction: the CP-51 SDK sent tenantId which
+  // the server's strict extra='forbid' schema rejected. Server
+  // accepts audit_id + action_summary (default '', max 2000 chars).
+  // Tenant inferred from auth context.
+  it('generate posts correct body', async () => {
     const auditId = '11111111-1111-1111-1111-111111111111';
     const { client, captured } = makeClient({
       status: 201,
-      body: { dossier_id: 'x' },
+      body: {
+        dossier_id: '00000000-0000-0000-0000-000000000040',
+        audit_id: auditId,
+        signing_key_id: 'verixa-sig-dev',
+        generated_at: '2026-05-11T22:00:00Z',
+      },
     });
-    await client.dossier.generate({ auditId, tenantId: TENANT });
+    await client.dossier.generate({
+      auditId,
+      actionSummary: 'customer approved payment of $5000',
+    });
     const body = JSON.parse(captured[0]?.init?.body as string);
-    expect(body).toEqual({ audit_id: auditId, tenant_id: TENANT });
+    expect(body.audit_id).toBe(auditId);
+    expect(body.action_summary).toBe('customer approved payment of $5000');
+    // CP-76 bug-fix: tenant_id MUST NOT be sent (server rejects).
+    expect(body.tenant_id).toBeUndefined();
+  });
+
+  it('generate defaults action_summary to empty string', async () => {
+    const auditId = '11111111-1111-1111-1111-111111111111';
+    const { client, captured } = makeClient({
+      status: 201,
+      body: {
+        dossier_id: '00000000-0000-0000-0000-000000000041',
+        audit_id: auditId,
+        signing_key_id: 'verixa-sig-dev',
+        generated_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    await client.dossier.generate({ auditId });
+    const body = JSON.parse(captured[0]?.init?.body as string);
+    expect(body.action_summary).toBe('');
+  });
+
+  it('generate with returnTyped:true returns DossierGenerateResponse', async () => {
+    const dossierId = '00000000-0000-0000-0000-0000000000cc';
+    const auditId = '11111111-1111-1111-1111-111111111111';
+    const { client } = makeClient({
+      status: 201,
+      body: {
+        dossier_id: dossierId,
+        audit_id: auditId,
+        signing_key_id: 'verixa-sig-prod-acme',
+        generated_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    const result = await client.dossier.generate({
+      auditId,
+      returnTyped: true,
+    });
+    expect(result.dossierId).toBe(dossierId);
+    expect(result.auditId).toBe(auditId);
+    expect(result.signingKeyId).toBe('verixa-sig-prod-acme');
+    expect(result.generatedAt).toBeInstanceOf(Date);
   });
 
   it('get fetches with id in path', async () => {
@@ -631,6 +684,29 @@ describe('dossier', () => {
     const { client, captured } = makeClient({ body: { dossier_id: dossierId } });
     await client.dossier.get(dossierId);
     expect(captured[0]?.url).toContain(`/v1/control/dossier/${dossierId}`);
+  });
+
+  it('get with returnTyped:true returns DossierGetResponse', async () => {
+    // CP-76 opt-in: returns DossierGetResponse with length-validated
+    // signatureHex (128 hex = 64 bytes Ed25519 sig) + publicKeyHex
+    // (64 hex = 32 bytes Ed25519 public key).
+    const dossierId = '22222222-2222-2222-2222-222222222222';
+    const auditId = '11111111-1111-1111-1111-111111111111';
+    const { client } = makeClient({
+      body: {
+        dossier_id: dossierId,
+        audit_id: auditId,
+        manifest: { summary: 'approved payment' },
+        signature_hex: 'a'.repeat(128),
+        public_key_hex: 'b'.repeat(64),
+      },
+    });
+    const result = await client.dossier.get(dossierId, { returnTyped: true });
+    expect(result.dossierId).toBe(dossierId);
+    expect(result.auditId).toBe(auditId);
+    expect(result.manifest).toEqual({ summary: 'approved payment' });
+    expect(result.signatureHex.length).toBe(128);
+    expect(result.publicKeyHex.length).toBe(64);
   });
 });
 

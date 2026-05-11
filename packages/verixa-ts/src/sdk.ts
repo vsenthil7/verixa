@@ -1,9 +1,13 @@
 import {
   type AgentRegisterResponse,
+  type DossierGenerateResponse,
+  type DossierGetResponse,
   type ToolRegisterResponse,
   type WorkflowListResponse,
   type WorkflowRegisterResponse,
   parseAgentRegisterResponse,
+  parseDossierGenerateResponse,
+  parseDossierGetResponse,
   parseToolRegisterResponse,
   parseWorkflowListResponse,
   parseWorkflowRegisterResponse,
@@ -353,30 +357,67 @@ export class ReplayClient {
   }
 }
 
+/**
+ * CP-76: kwargs for DossierClient.generate matching server-side
+ * DossierGenerateRequest. The CP-51 SDK shipped auditId + tenantId
+ * which the server's extra='forbid' schema rejects (tenant is
+ * inferred from auth context, same as workflow registration).
+ * Server accepts audit_id + action_summary (default '', max 2000
+ * chars; auditor-readable summary; empty triggers system-generated).
+ */
 interface DossierGenerateArgs {
   auditId: string;
-  tenantId: string;
+  actionSummary?: string;
 }
 
 export class DossierClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async generate(args: DossierGenerateArgs): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-76 generate() function overloads for opt-in typed return.
+  async generate(
+    args: DossierGenerateArgs & { returnTyped: true },
+  ): Promise<DossierGenerateResponse>;
+  async generate(
+    args: DossierGenerateArgs & { returnTyped?: false },
+  ): Promise<unknown>;
+  async generate(
+    args: DossierGenerateArgs & { returnTyped?: boolean },
+  ): Promise<unknown | DossierGenerateResponse> {
+    const data = await requestJson(this.config, {
       method: 'POST',
       path: '/v1/control/dossier',
       body: {
         audit_id: args.auditId,
-        tenant_id: args.tenantId,
+        action_summary: args.actionSummary ?? '',
       },
     });
+    if (args.returnTyped === true) {
+      return parseDossierGenerateResponse(data);
+    }
+    return data;
   }
 
-  async get(dossierId: string): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-76 get() function overloads for opt-in typed return.
+  async get(
+    dossierId: string,
+    opts: { returnTyped: true },
+  ): Promise<DossierGetResponse>;
+  async get(
+    dossierId: string,
+    opts?: { returnTyped?: false },
+  ): Promise<unknown>;
+  async get(
+    dossierId: string,
+    opts?: { returnTyped?: boolean },
+  ): Promise<unknown | DossierGetResponse> {
+    const data = await requestJson(this.config, {
       method: 'GET',
       path: `/v1/control/dossier/${dossierId}`,
     });
+    if (opts?.returnTyped === true) {
+      return parseDossierGetResponse(data);
+    }
+    return data;
   }
 }
 
