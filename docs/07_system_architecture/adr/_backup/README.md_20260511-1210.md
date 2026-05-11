@@ -30,7 +30,7 @@ of three different model families?"
 A superseded ADR keeps its number; a new ADR is added with a new number that
 references it.
 
-## Accepted ADRs (Phase 0)
+## Active ADRs (Phase 0)
 
 | # | Title | Status | Date |
 |---|---|---|---|
@@ -40,22 +40,10 @@ references it.
 | [ADR-0004](ADR-0004-ed25519-over-rsa-for-dossier-signing.md) | Ed25519 over RSA for dossier signing | Accepted | 2026-04-15 |
 | [ADR-0005](ADR-0005-mermaid-for-diagrams.md) | Mermaid for sequence/architecture diagrams (vs draw.io / PlantUML) | Accepted | 2026-05-11 |
 
-## Proposed ADRs (Phase 1 / Phase 2 — preliminary decisions captured)
+## Phase-1 ADRs (placeholders, to be written when implementation starts)
 
-These ADRs document the architectural questions Phase 1 and Phase 2 will resolve. Each contains: context, preliminary lean, consequences, alternatives considered, verification criteria. The "preliminary lean" is a starting point, not a binding decision — the actual choice gets made at the relevant phase kickoff after design-partner customer requirements come in.
-
-| # | Title | Status | Date | Phase |
-|---|---|---|---|---|
-| [ADR-0006](ADR-0006-postgres-audit-ledger-partitioning.md) | Postgres schema partitioning strategy for the audit ledger | Proposed | 2026-05-11 | 1 |
-| [ADR-0007](ADR-0007-spire-workload-attestation-vs-api-keys.md) | SPIRE workload attestation vs API-key tenant auth | Proposed | 2026-05-11 | 1 |
-| [ADR-0008](ADR-0008-vault-vs-cloud-kms-for-key-custody.md) | HashiCorp Vault vs cloud KMS for signing-key custody | Proposed | 2026-05-11 | 1 |
-| [ADR-0009](ADR-0009-approval-matrix-routing-rules.md) | Approval-matrix (human-in-the-loop) routing rules | Proposed | 2026-05-11 | 1 |
-| [ADR-0010](ADR-0010-vector-index-for-contradiction-detection.md) | Vector-index choice for contradiction detection | Proposed | 2026-05-11 | 2 |
-
-## Future placeholders (no preliminary lean yet — written when work starts)
-
-- ADR-0011 — Heterogeneous triad model rollout (Qwen3-72B + Llama-3.3-70B + DeepSeek-V3) — Phase 2
-- ADR-0012 — Reviewer-signed commitments (replacing orchestrator-trust assumption from ADR-0003) — Phase 2
-- ADR-0013 — Post-quantum signature path (Dilithium parallel to Ed25519) — Phase 2
-- ADR-0014 — TEE-backed triad (SGX / SEV-SNP / NVIDIA Confidential Compute) — Phase 3
-- ADR-0015 — Cross-tenant trust graph + federated audit — Phase 4
+- ADR-0006 — Postgres schema partitioning strategy for the audit ledger
+- ADR-0007 — SPIRE workload attestation vs API-key tenant auth
+- ADR-0008 — HashiCorp Vault vs cloud KMS for signing-key custody
+- ADR-0009 — Approval-matrix (human-in-the-loop) routing rules
+- ADR-0010 — Vector-index choice for contradiction detection (Phase 2)
