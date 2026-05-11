@@ -226,8 +226,9 @@ describe('HTTP error handling', () => {
       status: 400,
       body: { error: 'invalid', message: 'bad name' },
     });
+    // CP-70: ownerTenantId removed from register signature.
     await expect(
-      client.workflows.register({ name: '', ownerTenantId: TENANT }),
+      client.workflows.register({ name: '' }),
     ).rejects.toBeInstanceOf(VerixaHttpError);
   });
 
@@ -285,32 +286,98 @@ describe('HTTP error handling', () => {
 // ---------------------------------------------------------------------------
 
 describe('workflows', () => {
+  // CP-70 wire-format correction: the CP-51 SDK sent ownerTenantId
+  // which the server's strict extra='forbid' schema rejected.
+  // Server WorkflowRegisterRequest accepts name + description
+  // (default '') + sector (default 'generic') + risk_threshold_escalate
+  // (default 0.50, float [0,1]).
   it('register posts correct body', async () => {
     const { client, captured } = makeClient({
       status: 201,
-      body: { workflow_id: WORKFLOW, name: 'payments' },
+      body: {
+        workflow_id: WORKFLOW,
+        name: 'payments',
+        sector: 'financial-services',
+        created_at: '2026-05-11T22:00:00Z',
+      },
     });
     const result = await client.workflows.register({
       name: 'payments',
-      ownerTenantId: TENANT,
-      description: 'test',
+      description: 'payments workflow',
+      sector: 'financial-services',
+      riskThresholdEscalate: 0.65,
     });
     expect(captured[0]?.init?.method).toBe('POST');
     expect(captured[0]?.url).toContain('/v1/control/workflows');
     const body = JSON.parse(captured[0]?.init?.body as string);
     expect(body).toEqual({
       name: 'payments',
-      owner_tenant_id: TENANT,
-      description: 'test',
+      description: 'payments workflow',
+      sector: 'financial-services',
+      risk_threshold_escalate: 0.65,
     });
-    expect(result).toEqual({ workflow_id: WORKFLOW, name: 'payments' });
+    // CP-70 bug-fix: owner_tenant_id MUST NOT be sent (server rejects).
+    expect(body.owner_tenant_id).toBeUndefined();
+    expect((result as { name: string }).name).toBe('payments');
   });
 
-  it('register sends null description when omitted', async () => {
-    const { client, captured } = makeClient({ status: 201, body: {} });
-    await client.workflows.register({ name: 'x', ownerTenantId: TENANT });
+  it('register uses documented defaults when optional kwargs omitted', async () => {
+    // Server defaults: description='', sector='generic', risk_threshold=0.50.
+    // SDK MUST match so callers omitting kwargs get a deterministic body.
+    const { client, captured } = makeClient({
+      status: 201,
+      body: {
+        workflow_id: WORKFLOW,
+        name: 'x',
+        sector: 'generic',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    await client.workflows.register({ name: 'x' });
     const body = JSON.parse(captured[0]?.init?.body as string);
-    expect(body.description).toBeNull();
+    expect(body.description).toBe('');
+    expect(body.sector).toBe('generic');
+    expect(body.risk_threshold_escalate).toBe(0.5);
+  });
+
+  it('register with returnTyped:true returns WorkflowRegisterResponse', async () => {
+    // CP-70 opt-in: returnTyped:true returns the parsed envelope.
+    const { client } = makeClient({
+      status: 201,
+      body: {
+        workflow_id: WORKFLOW,
+        name: 'payments',
+        sector: 'financial-services',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    const result = await client.workflows.register({
+      name: 'payments',
+      sector: 'financial-services',
+      returnTyped: true,
+    });
+    expect(result.workflowId).toBe(WORKFLOW);
+    expect(result.name).toBe('payments');
+    expect(result.sector).toBe('financial-services');
+    expect(result.createdAt).toBeInstanceOf(Date);
+  });
+
+  it('register with returnTyped:false returns unknown (back-compat)', async () => {
+    const { client } = makeClient({
+      status: 201,
+      body: {
+        workflow_id: WORKFLOW,
+        name: 'payments',
+        sector: 'generic',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    const result = await client.workflows.register({
+      name: 'payments',
+      returnTyped: false,
+    });
+    // returnTyped:false path returns the raw JSON (typed as unknown).
+    expect((result as { name: string }).name).toBe('payments');
   });
 
   it('list calls GET', async () => {
@@ -320,6 +387,45 @@ describe('workflows', () => {
     const result = await client.workflows.list();
     expect(captured[0]?.init?.method).toBe('GET');
     expect(result).toEqual({ workflows: [], total: 0 });
+  });
+
+  it('list with returnTyped:true returns WorkflowListResponse', async () => {
+    const { client } = makeClient({
+      body: {
+        workflows: [
+          {
+            workflow_id: WORKFLOW,
+            name: 'payments',
+            sector: 'financial-services',
+            risk_threshold_escalate: 0.5,
+            agent_count: 3,
+            created_at: '2026-05-11T22:00:00Z',
+          },
+        ],
+        total: 1,
+      },
+    });
+    const result = await client.workflows.list({ returnTyped: true });
+    expect(result.total).toBe(1);
+    expect(result.workflows.length).toBe(1);
+    expect(result.workflows[0]?.name).toBe('payments');
+    // Frozen immutable array (mirrors Python tuple-not-list).
+    expect(Object.isFrozen(result.workflows)).toBe(true);
+  });
+
+  it('list with returnTyped:true bubbles InvalidEnvelopeError on bad payload', async () => {
+    // Server response missing the required 'total' field. The typed
+    // path raises InvalidEnvelopeError with the field name in the
+    // message; the untyped path returns the raw dict (no validation).
+    const { client } = makeClient({
+      body: { workflows: [] }, // missing 'total'
+    });
+    await expect(
+      client.workflows.list({ returnTyped: true }),
+    ).rejects.toThrow(/field total/);
+    // Untyped path is unchanged: returns raw payload.
+    const raw = await client.workflows.list();
+    expect(raw).toEqual({ workflows: [] });
   });
 });
 

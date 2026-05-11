@@ -1,3 +1,10 @@
+import {
+  type WorkflowListResponse,
+  type WorkflowRegisterResponse,
+  parseWorkflowListResponse,
+  parseWorkflowRegisterResponse,
+} from './envelopes.js';
+
 /**
  * CP-51 -- Verixa TypeScript SDK (alpha): async client for Control Plane API.
  *
@@ -151,32 +158,65 @@ async function requestJson<T = unknown>(
 // Resource clients
 // ---------------------------------------------------------------------------
 
+/**
+ * CP-70: kwargs for WorkflowsClient.register matching the server-side
+ * WorkflowRegisterRequest exactly. The CP-51 SDK shipped with
+ * `ownerTenantId` which the server's `extra: 'forbid'` schema
+ * rejects (tenant is inferred from auth context). Now uses
+ * `description` (default empty string), `sector` (default `generic`),
+ * `riskThresholdEscalate` (default 0.50; float in [0, 1]).
+ */
 interface WorkflowRegisterArgs {
   name: string;
-  ownerTenantId: string;
   description?: string;
+  sector?: string;
+  riskThresholdEscalate?: number;
 }
 
 export class WorkflowsClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async register(args: WorkflowRegisterArgs): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-70: function overloads for opt-in typed return.
+  // returnTyped: true -> typed envelope; returnTyped: false | omitted -> unknown.
+  async register(
+    args: WorkflowRegisterArgs & { returnTyped: true },
+  ): Promise<WorkflowRegisterResponse>;
+  async register(
+    args: WorkflowRegisterArgs & { returnTyped?: false },
+  ): Promise<unknown>;
+  async register(
+    args: WorkflowRegisterArgs & { returnTyped?: boolean },
+  ): Promise<unknown | WorkflowRegisterResponse> {
+    const data = await requestJson(this.config, {
       method: 'POST',
       path: '/v1/control/workflows',
       body: {
         name: args.name,
-        owner_tenant_id: args.ownerTenantId,
-        description: args.description ?? null,
+        description: args.description ?? '',
+        sector: args.sector ?? 'generic',
+        risk_threshold_escalate: args.riskThresholdEscalate ?? 0.5,
       },
     });
+    if (args.returnTyped === true) {
+      return parseWorkflowRegisterResponse(data);
+    }
+    return data;
   }
 
-  async list(): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-70: list overloads
+  async list(opts: { returnTyped: true }): Promise<WorkflowListResponse>;
+  async list(opts?: { returnTyped?: false }): Promise<unknown>;
+  async list(
+    opts?: { returnTyped?: boolean },
+  ): Promise<unknown | WorkflowListResponse> {
+    const data = await requestJson(this.config, {
       method: 'GET',
       path: '/v1/control/workflows',
     });
+    if (opts?.returnTyped === true) {
+      return parseWorkflowListResponse(data);
+    }
+    return data;
   }
 }
 
