@@ -1,0 +1,88 @@
+## Verixa pre-commit hooks (CP-60).
+##
+## Two layers:
+##
+##   1. Standard hygiene (ruff lint + format, trailing-whitespace,
+##      end-of-file-fixer, large-file guard, JSON/YAML/TOML validity)
+##   2. The Verixa-specific OpenAPI drift gate (CP-54): whenever a file
+##      changes that could alter the control-plane FastAPI schema
+##      (routes.py / envelopes.py / handlers.py / app.py), re-run
+##      `tools.openapi_export diff` and FAIL the commit if the
+##      committed docs/openapi.json artifact is stale.
+##
+## Install with:
+##
+##   pipx install pre-commit
+##   pre-commit install
+##
+## Run manually:  pre-commit run --all-files
+##
+## CI behaviour:  GitHub Actions runs the same hooks via the `verify`
+## job in release.yml (CP-59) so a commit that skipped local hooks
+## still fails at PR time. Local hooks are an early-warning system,
+## not a substitute for CI.
+
+repos:
+  ## ----------------------------------------------------------------------
+  ## Standard hygiene
+  ## ----------------------------------------------------------------------
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        ## Markdown sometimes uses 2-trailing-space for hard breaks; allow.
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: ^\.github/workflows/  ## GitHub Actions uses on: bool key
+      - id: check-toml
+      - id: check-json
+        ## Exclude the committed openapi.json -- the openapi-drift hook
+        ## handles its content + the check-json default would accept
+        ## stale-but-valid JSON, which is exactly what we want to catch.
+        exclude: ^docs/openapi\.json$
+      - id: check-added-large-files
+        args: [--maxkb=512]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  ## ----------------------------------------------------------------------
+  ## Ruff (matches the configuration in pyproject.toml)
+  ## ----------------------------------------------------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  ## ----------------------------------------------------------------------
+  ## Verixa-specific: OpenAPI drift gate (CP-54)
+  ## ----------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: openapi-drift
+        name: openapi-drift (CP-54)
+        description: >
+          Run tools.openapi_export diff if any file that could alter the
+          FastAPI schema has changed. Fails the commit if
+          docs/openapi.json is stale.
+        entry: poetry run python -m tools.openapi_export diff
+        language: system
+        pass_filenames: false
+        ## Only re-run when files that could alter the schema change:
+        ## the FastAPI route wiring, request/response envelopes, handler
+        ## signatures, and the operational app definition.
+        files: |
+          (?x)^(
+            apps/control-plane-api/verixa_control_plane/routes\.py|
+            apps/control-plane-api/verixa_control_plane/envelopes\.py|
+            apps/control-plane-api/verixa_control_plane/handlers\.py|
+            apps/control-plane-api/verixa_control_plane/audit\.py|
+            apps/control-plane-api/verixa_control_plane/app\.py|
+            apps/control-plane-api/verixa_control_plane/asgi\.py|
+            apps/control-plane-api/verixa_control_plane/registry\.py|
+            docs/openapi\.json
+          )$
