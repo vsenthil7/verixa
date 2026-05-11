@@ -60,6 +60,7 @@ from verixa.envelopes import (
     AgentRegisterResponse,
     DossierGenerateResponse,
     DossierGetResponse,
+    ReplayResponse,
     ToolRegisterResponse,
     WorkflowListResponse,
     WorkflowRegisterResponse,
@@ -456,17 +457,49 @@ class AuditClient(_SubClient):
 
 
 class ReplayClient(_SubClient):
-    """Replay reconstruction."""
+    """Replay reconstruction.
+
+    CP-77 adds opt-in ``return_typed=True`` overload returning
+    ``ReplayResponse`` (10 fields including audit_id + tenant_id +
+    decision + risk_score + request_envelope opaque dict + 3
+    tuple-of-dict collections retrieved_documents + tool_io +
+    policy_evaluations + optional triad_review + timestamp_unix_ns).
+    Request shape (audit_id only) was already correct in CP-50.
+    """
+
+    @overload
+    async def get(
+        self, *, audit_id: uuid.UUID, return_typed: Literal[True]
+    ) -> ReplayResponse: ...
+
+    @overload
+    async def get(
+        self, *, audit_id: uuid.UUID, return_typed: Literal[False] = ...
+    ) -> dict[str, Any]: ...
 
     async def get(
-        self, *, audit_id: uuid.UUID
-    ) -> dict[str, Any]:
-        return await _request_json(
+        self,
+        *,
+        audit_id: uuid.UUID,
+        return_typed: bool = False,
+    ) -> dict[str, Any] | ReplayResponse:
+        """Reconstruct a previously-snapshotted decision by audit_id.
+
+        Args:
+            audit_id: the audit ID to replay.
+            return_typed: if True, returns ``ReplayResponse`` with
+                all collections as tuples (immutable) and an opaque
+                request_envelope/triad_review.
+        """
+        data = await _request_json(
             self._http,
             "POST",
             "/v1/control/replay",
             json={"audit_id": str(audit_id)},
         )
+        if return_typed:
+            return ReplayResponse.from_dict(data)
+        return data
 
 
 class DossierClient(_SubClient):

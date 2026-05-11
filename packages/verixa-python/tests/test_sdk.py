@@ -714,6 +714,87 @@ async def test_replay_get_posts_audit_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_replay_get_return_typed_true_returns_dataclass() -> None:
+    """CP-77 opt-in: ``return_typed=True`` returns ``ReplayResponse``
+    with all collections as tuples (immutable) and opaque
+    request_envelope/triad_review."""
+    from verixa.envelopes import ReplayResponse
+
+    audit_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "audit_id": str(audit_id),
+                "tenant_id": str(tenant_id),
+                "decision": "allow",
+                "risk_score": 0.12,
+                "request_envelope": {"prompt": "approve $5000 payment"},
+                "retrieved_documents": [
+                    {"doc_id": "d1", "content_sha256": "abc"},
+                ],
+                "tool_io": [],
+                "policy_evaluations": [
+                    {"package": "fs.pii", "decision": "allow", "reason": "no pii"},
+                ],
+                "triad_review": None,
+                "timestamp_unix_ns": 1747000000000000000,
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.replay.get(audit_id=audit_id, return_typed=True)
+    assert isinstance(result, ReplayResponse)
+    assert result.audit_id == audit_id
+    assert result.tenant_id == tenant_id
+    assert result.decision == "allow"
+    assert result.risk_score == 0.12
+    assert result.triad_review is None
+    # Collections are tuple-not-list (immutable)
+    assert isinstance(result.retrieved_documents, tuple)
+    assert isinstance(result.tool_io, tuple)
+    assert isinstance(result.policy_evaluations, tuple)
+    assert len(result.retrieved_documents) == 1
+    assert result.retrieved_documents[0]["doc_id"] == "d1"
+
+
+@pytest.mark.asyncio
+async def test_replay_get_return_typed_with_triad_review() -> None:
+    """Parses triad_review dict when present (triad-invoked decision)."""
+    from verixa.envelopes import ReplayResponse
+
+    audit_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
+    triad = {"agreement": True, "votes": [{"model": "qwen3", "vote": "approve"}]}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "audit_id": str(audit_id),
+                "tenant_id": str(tenant_id),
+                "decision": "escalate",
+                "risk_score": 0.75,
+                "request_envelope": {},
+                "retrieved_documents": [],
+                "tool_io": [],
+                "policy_evaluations": [],
+                "triad_review": triad,
+                "timestamp_unix_ns": 1747000000000000000,
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.replay.get(audit_id=audit_id, return_typed=True)
+    assert isinstance(result, ReplayResponse)
+    assert result.triad_review == triad
+
+
+@pytest.mark.asyncio
 async def test_dossier_generate_posts_correct_body() -> None:
     """CP-75 corrects the CP-50 wire-format bug: server's
     ``DossierGenerateRequest`` accepts ``audit_id + action_summary``;
