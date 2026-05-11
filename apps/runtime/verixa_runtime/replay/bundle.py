@@ -157,6 +157,19 @@ class ReplayBundle:
                     "retrieved_documents entries must be (doc_id, "
                     "content_sha256_hex) string pairs"
                 )
+            # CP-30 Phase-1 gap closure (commit 2026-05-11 11:54 UK):
+            # empty doc_id or empty hash slipped past the earlier
+            # tuple-shape check. Now rejected explicitly. The xfail
+            # marker in test_size_limits.py flips to GREEN.
+            if not d[0]:
+                raise ValueError(
+                    "retrieved_documents doc_id must be non-empty"
+                )
+            if not d[1]:
+                raise ValueError(
+                    "retrieved_documents content_sha256_hex must be "
+                    "non-empty"
+                )
 
 
 # ---------------------------------------------------------------------------
