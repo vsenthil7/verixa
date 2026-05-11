@@ -207,6 +207,7 @@ CI: GitHub Actions runs all three suites on every push and pull request to
 The full architecture and operations pack lives under [`docs/`](docs/).
 Highlights for first-time readers:
 
+- [`docs/02_use_cases/USE_CASES.md`](docs/02_use_cases/USE_CASES.md) — **10 working use cases with sequence diagrams**, all exercised by the seeded demo
 - [`docs/04_architecture/ARCHITECTURE.md`](docs/04_architecture/ARCHITECTURE.md) — 24 modules, 4 groups, dependency graph
 - [`docs/09_evidence_pack/EVIDENCE_PACK_SPEC.md`](docs/09_evidence_pack/EVIDENCE_PACK_SPEC.md) — dossier structure, signing, offline verification
 - [`docs/12_security_compliance/SECURITY_COMPLIANCE.md`](docs/12_security_compliance/SECURITY_COMPLIANCE.md) — threat model, EU AI Act / GDPR mapping
