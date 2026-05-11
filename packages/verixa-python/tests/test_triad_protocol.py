@@ -27,6 +27,7 @@ verixa_runtime/triad/protocol.py.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import uuid
 
@@ -96,7 +97,7 @@ def test_verdict_confidence_above_one_rejected() -> None:
 
 def test_verdict_is_frozen() -> None:
     v = _make_verdict()
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         v.confidence = 0.1  # type: ignore[misc]
 
 

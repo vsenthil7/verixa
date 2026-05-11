@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from verixa_control_plane.audit import AuditLedgerEntry
 from verixa_control_plane.routes import (
+    ControlPlaneState,
     build_default_state,
     create_app_with_state,
 )
@@ -24,7 +25,7 @@ from verixa_runtime.dossier.manifest import DossierManifest
 from verixa_runtime.replay.snapshotter import SnapshotInputs
 
 
-def _client() -> tuple[TestClient, ControlPlaneStateType]:  # type: ignore[name-defined]
+def _client() -> tuple[TestClient, ControlPlaneState]:
     state = build_default_state()
     app = create_app_with_state(state)
     return TestClient(app), state

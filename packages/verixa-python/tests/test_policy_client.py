@@ -215,7 +215,10 @@ async def test_evaluate_fail_decision_returned(
             json={
                 "result": {
                     "decision": "fail",
-                    "reason": "transfer amount 15000 exceeds role limit 10000 for role loan-officer",
+                    "reason": (
+                        "transfer amount 15000 exceeds role limit "
+                        "10000 for role loan-officer"
+                    ),
                 }
             },
         )

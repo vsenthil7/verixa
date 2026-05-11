@@ -173,7 +173,10 @@ def test_json_with_invalid_utf8_surrogate_rejected() -> None:
 
     This is STRONGER protection than catching the surrogate at the
     seal layer -- pydantic refuses to even construct the model."""
-    bad_json_bytes = b'{"spiffe_id": "spiffe://x", "role": "\\ud800", "workflow_id": "00000000-0000-0000-0000-000000000000"}'
+    bad_json_bytes = (
+        b'{"spiffe_id": "spiffe://x", "role": "\\ud800", '
+        b'"workflow_id": "00000000-0000-0000-0000-000000000000"}'
+    )
     parsed = json.loads(bad_json_bytes.decode("utf-8"))
     # Pydantic v2 strict-mode str rejects unpaired surrogates at the
     # validate boundary with a string_unicode validation error.
