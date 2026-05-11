@@ -430,21 +430,82 @@ describe('workflows', () => {
 });
 
 describe('agents', () => {
-  it('register maps camelCase to snake_case in body', async () => {
-    const { client, captured } = makeClient({ status: 201, body: {} });
+  // CP-72 wire-format correction: the CP-51 SDK sent name +
+  // model_provider + model_name which the server's strict
+  // extra='forbid' schema rejected. Server accepts workflow_id +
+  // spiffe_id + role + description.
+  it('register posts correct body', async () => {
+    const { client, captured } = makeClient({
+      status: 201,
+      body: {
+        agent_id: '00000000-0000-0000-0000-000000000010',
+        workflow_id: WORKFLOW,
+        spiffe_id: 'spiffe://verixa.local/prod/gw/1',
+        role: 'gateway',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
     await client.agents.register({
       workflowId: WORKFLOW,
-      name: 'reviewer-1',
-      modelProvider: 'amd-mi300x',
-      modelName: 'qwen3-0.6b',
+      spiffeId: 'spiffe://verixa.local/prod/gw/1',
+      role: 'gateway',
+      description: 'payments gateway',
     });
     const body = JSON.parse(captured[0]?.init?.body as string);
     expect(body).toEqual({
       workflow_id: WORKFLOW,
-      name: 'reviewer-1',
-      model_provider: 'amd-mi300x',
-      model_name: 'qwen3-0.6b',
+      spiffe_id: 'spiffe://verixa.local/prod/gw/1',
+      role: 'gateway',
+      description: 'payments gateway',
     });
+    // CP-72 bug-fix: legacy fields MUST NOT be sent (server rejects).
+    expect(body.name).toBeUndefined();
+    expect(body.model_provider).toBeUndefined();
+    expect(body.model_name).toBeUndefined();
+  });
+
+  it('register defaults description to empty string', async () => {
+    const { client, captured } = makeClient({
+      status: 201,
+      body: {
+        agent_id: '00000000-0000-0000-0000-000000000010',
+        workflow_id: WORKFLOW,
+        spiffe_id: 'x',
+        role: 'y',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    await client.agents.register({
+      workflowId: WORKFLOW,
+      spiffeId: 'spiffe://x',
+      role: 'gateway',
+    });
+    const body = JSON.parse(captured[0]?.init?.body as string);
+    expect(body.description).toBe('');
+  });
+
+  it('register with returnTyped:true returns AgentRegisterResponse', async () => {
+    const agentId = '00000000-0000-0000-0000-0000000000aa';
+    const { client } = makeClient({
+      status: 201,
+      body: {
+        agent_id: agentId,
+        workflow_id: WORKFLOW,
+        spiffe_id: 'spiffe://verixa.local/prod/gw/1',
+        role: 'gateway',
+        created_at: '2026-05-11T22:00:00Z',
+      },
+    });
+    const result = await client.agents.register({
+      workflowId: WORKFLOW,
+      spiffeId: 'spiffe://verixa.local/prod/gw/1',
+      role: 'gateway',
+      returnTyped: true,
+    });
+    expect(result.agentId).toBe(agentId);
+    expect(result.workflowId).toBe(WORKFLOW);
+    expect(result.role).toBe('gateway');
+    expect(result.createdAt).toBeInstanceOf(Date);
   });
 });
 

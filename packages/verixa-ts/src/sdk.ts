@@ -1,6 +1,8 @@
 import {
+  type AgentRegisterResponse,
   type WorkflowListResponse,
   type WorkflowRegisterResponse,
+  parseAgentRegisterResponse,
   parseWorkflowListResponse,
   parseWorkflowRegisterResponse,
 } from './envelopes.js';
@@ -220,27 +222,49 @@ export class WorkflowsClient {
   }
 }
 
+/**
+ * CP-72: kwargs for AgentsClient.register matching the server-side
+ * AgentRegisterRequest exactly. The CP-51 SDK shipped with
+ * workflowId + name + modelProvider + modelName which the server's
+ * extra='forbid' schema rejects. Server accepts workflowId +
+ * spiffeId (1..512 chars, SPIFFE identity; Phase-0 bypasses
+ * verification but the field is recorded for CP-53 mTLS forward
+ * compatibility) + role (1..128 chars) + description (default '').
+ */
 interface AgentRegisterArgs {
   workflowId: string;
-  name: string;
-  modelProvider: string;
-  modelName: string;
+  spiffeId: string;
+  role: string;
+  description?: string;
 }
 
 export class AgentsClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async register(args: AgentRegisterArgs): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-72 function overloads for opt-in typed return.
+  async register(
+    args: AgentRegisterArgs & { returnTyped: true },
+  ): Promise<AgentRegisterResponse>;
+  async register(
+    args: AgentRegisterArgs & { returnTyped?: false },
+  ): Promise<unknown>;
+  async register(
+    args: AgentRegisterArgs & { returnTyped?: boolean },
+  ): Promise<unknown | AgentRegisterResponse> {
+    const data = await requestJson(this.config, {
       method: 'POST',
       path: '/v1/control/agents',
       body: {
         workflow_id: args.workflowId,
-        name: args.name,
-        model_provider: args.modelProvider,
-        model_name: args.modelName,
+        spiffe_id: args.spiffeId,
+        role: args.role,
+        description: args.description ?? '',
       },
     });
+    if (args.returnTyped === true) {
+      return parseAgentRegisterResponse(data);
+    }
+    return data;
   }
 }
 
