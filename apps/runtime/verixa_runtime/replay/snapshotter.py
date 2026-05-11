@@ -88,6 +88,12 @@ class AuditIndexMiss(KeyError):
     """Raised by AuditIndex.get when audit_id is unknown."""
 
 
+class ReconstructorAuditIdMismatch(RuntimeError):
+    """Raised when an audit-index pointer leads to a bundle whose own
+    audit_id does not match the requested audit_id. Catches audit-index
+    tampering / cross-tenant substitution (CP-37 attack model 7)."""
+
+
 class InMemoryAuditIndex:
     """Dict-backed AuditIndex for tests and the offline demo."""
 
@@ -242,11 +248,26 @@ class Reconstructor:
 
         Raises AuditIndexMiss if no index entry exists,
         BundleNotFound if the index points at a key that's been
-        deleted from the store, or AesGcmDecryptionError if the
-        ciphertext fails to authenticate (wrong key, tamper).
+        deleted from the store, AesGcmDecryptionError if the
+        ciphertext fails to authenticate (wrong key, tamper), or
+        ReconstructorAuditIdMismatch if the bundle's recorded
+        audit_id does not match the requested audit_id (catches
+        audit-index tampering / cross-tenant substitution).
         """
         storage_key = await self._index.get(audit_id)
         encrypted = await self._store.get(storage_key)
+        # Defence-in-depth: the EncryptedBundle has its own audit_id
+        # baked in at snapshot time. If a tampered audit-index points
+        # this audit_id at a DIFFERENT bundle's storage_key, the
+        # bundle.audit_id will not match the requested audit_id.
+        # Raise rather than silently return cross-tenant data.
+        # CP-40 closes CP-37 attack model 7.
+        if encrypted.audit_id != audit_id:
+            raise ReconstructorAuditIdMismatch(
+                f"audit_id mismatch: requested {audit_id} but index pointed "
+                f"at bundle with audit_id {encrypted.audit_id}; "
+                f"possible audit-index tampering or cross-tenant substitution"
+            )
         key = self._key_resolver(encrypted.tenant_id)
         return decrypt_bundle(encrypted, key)
 
@@ -257,6 +278,7 @@ __all__ = [
     "AuditIndexMiss",
     "BundleNotFound",
     "InMemoryAuditIndex",
+    "ReconstructorAuditIdMismatch",
     "Reconstructor",
     "SnapshotInputs",
     "SnapshotResult",

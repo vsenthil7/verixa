@@ -53,14 +53,12 @@ import statistics
 import time
 
 import pytest
-from verixa_runtime.crypto.ed25519 import Ed25519SignatureError
-
 from verixa_runtime.crypto.ed25519 import (
+    Ed25519SignatureError,
     generate_keypair,
     sign,
     verify,
 )
-
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -141,7 +139,7 @@ def test_verify_rejects_middle_byte_flip(keypair: tuple[bytes, bytes]) -> None:
         verify(pub, _MSG, forged)
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-1 timing-attack tripwire: byte0 verification shows ~40x slower than last-byte verification on Windows-Python perf_counter_ns measurements; could be Python wrapping overhead, OS scheduler artifact on small samples, or a real timing channel. Marked xfail strict=False so the test runs and surfaces variance in CI without blocking. Phase 1 task: investigate with cryptolib-team analysis + larger sample sizes + dedicated benchmark harness; if false-positive, replace with finer-grained constant-time assertion; if real, escalate as security finding.")
+@pytest.mark.xfail(strict=False, reason="Phase-1 timing-attack tripwire: byte0 verification shows ~40x slower than last-byte verification on Windows-Python perf_counter_ns measurements; could be Python wrapping overhead, OS scheduler artifact on small samples, or a real timing channel. Marked xfail strict=False so the test runs and surfaces variance in CI without blocking. Phase 1 task: investigate with cryptolib-team analysis + larger sample sizes + dedicated benchmark harness; if false-positive, replace with finer-grained constant-time assertion; if real, escalate as security finding.")  # noqa: E501 -- intentional long-form Phase-1 investigation note
 def test_verify_byte0_vs_last_byte_timing_indistinguishable(
     keypair: tuple[bytes, bytes],
 ) -> None:
@@ -169,7 +167,8 @@ def test_verify_byte0_vs_last_byte_timing_indistinguishable(
     median_byte0 = statistics.median(times_byte0)
     median_last = statistics.median(times_last)
 
-    # The constant-time assertion: medians within 20x (loose to tolerate OS-scheduler noise on small samples).
+    # The constant-time assertion: medians within 20x  # noqa: E501
+    # (loose to tolerate OS-scheduler noise on small samples).
     ratio = max(median_byte0, median_last) / min(median_byte0, median_last)
     assert ratio < 20.0, (
         f"Possible timing leak: byte0={median_byte0}ns vs "
@@ -231,7 +230,7 @@ def test_verify_rejects_all_ones_signature(keypair: tuple[bytes, bytes]) -> None
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=False, reason="Phase-1 timing-attack tripwire companion to byte0-vs-last test above; same investigation.")
+@pytest.mark.xfail(strict=False, reason="Phase-1 timing-attack tripwire companion to byte0-vs-last test above; same investigation.")  # noqa: E501 -- intentional long-form Phase-1 investigation note
 def test_verify_wrong_key_vs_wrong_sig_timing(keypair: tuple[bytes, bytes]) -> None:
     """Verifying a real signature with a WRONG public key takes ~the same
     time as verifying a forged signature with the right public key.

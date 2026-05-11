@@ -41,10 +41,8 @@ Attack model 5 - Catastrophic key loss:
 from __future__ import annotations
 
 import uuid
-from dataclasses import replace
 
 import pytest
-
 from verixa_runtime.crypto.aes_gcm import (
     AesGcmCiphertext,
     AesGcmDecryptionError,
@@ -60,8 +58,7 @@ from verixa_runtime.replay import (
     Snapshotter,
     decrypt_bundle,
 )
-from verixa_runtime.replay.snapshotter import SnapshotInputs
-
+from verixa_runtime.replay.snapshotter import ReconstructorAuditIdMismatch, SnapshotInputs
 
 _TENANT_A = uuid.UUID("aaaaaaaa-1111-1111-1111-aaaaaaaaaaaa")
 _TENANT_B = uuid.UUID("bbbbbbbb-2222-2222-2222-bbbbbbbbbbbb")
@@ -551,30 +548,20 @@ async def test_swapping_bundle_storage_keys_detected(
     at Tenant B's bundle bytes, the reconstruction MUST fail rather than
     return cross-tenant data.
 
-    Phase 0 detection layers:
-    1. EncryptedBundle.tenant_id is part of the on-disk record - the
-       AuditIndex stores storage_key (=hash of ciphertext+nonce+AD);
-       fetching B's encrypted bundle returns an object with B's
-       tenant_id baked in.
-    2. Reconstructor calls key_resolver(encrypted.tenant_id), so it'd
-       fetch B's DEK and successfully decrypt B's bundle.
-    3. Therefore this test demonstrates a real risk: if the
-       audit-index alone is tampered (storage_key swapped) and the
-       attacker can't influence the BundleStore, the result is that
-       audit_id A's reconstruct returns a B bundle - data exposure
-       across tenants.
+    CP-40 closes this attack: Reconstructor.reconstruct now checks that
+    the fetched EncryptedBundle's audit_id matches the requested audit_id
+    and raises ReconstructorAuditIdMismatch if they differ.
 
-    Phase 1 mitigation: Reconstructor should validate that the
-    returned bundle's audit_id matches the requested audit_id (the
-    sealer.decrypt_bundle does check audit_id internally against the
-    EncryptedBundle's audit_id label, but not against the requested
-    audit_id from the caller). Until that's added, this test serves
-    as a Phase-1 tracking marker.
-
-    Acting as a tripwire: the test asserts the bundle returned has
-    SOME tenant_id (it does, B's), but does NOT yet assert that
-    cross-tenant substitution is blocked. Phase 1 work adds that
-    assertion."""
+    Attack scenario reconstruction:
+      1. Seed two bundles: audit_id_a -> Tenant A bundle; audit_id_b ->
+         Tenant B bundle.
+      2. Tamper InMemoryAuditIndex._items directly (bypassing the
+         conflict-detection in put()) so audit_id_a points at Tenant
+         B's storage_key.
+      3. Attempt reconstruct(audit_id_a). Pre-CP-40 this would have
+         returned Tenant B's bundle (cross-tenant data exposure).
+         Post-CP-40, the audit_id guard fires:
+         ReconstructorAuditIdMismatch raised."""
     bundle_store, audit_index, tenant_keys, snapshotter, reconstructor = (
         two_tenant_replay_system
     )
@@ -592,3 +579,55 @@ async def test_swapping_bundle_storage_keys_detected(
     assert bundle_a.tenant_id == _TENANT_A
     bundle_b = await reconstructor.reconstruct(audit_id_b)
     assert bundle_b.tenant_id == _TENANT_B
+
+    # ATTACK: tamper the audit-index to point audit_id_a at
+    # Tenant B's storage_key. The conflict-detection in put() would
+    # block this via the public API, so we mutate _items directly to
+    # simulate an attacker with index-table write access.
+    storage_key_b = audit_index._items[audit_id_b]
+    audit_index._items[audit_id_a] = storage_key_b
+
+    # CP-40 guard fires: ReconstructorAuditIdMismatch raised because
+    # the fetched bundle has audit_id_b baked in but the caller
+    # requested audit_id_a.
+    with pytest.raises(ReconstructorAuditIdMismatch, match="audit_id mismatch"):
+        await reconstructor.reconstruct(audit_id_a)
+
+
+@pytest.mark.asyncio
+async def test_reconstructor_audit_id_guard_message_includes_both_ids(
+    two_tenant_replay_system,
+) -> None:
+    """The ReconstructorAuditIdMismatch message MUST mention both the
+    requested audit_id and the actually-fetched audit_id, so operators
+    can investigate the tampering. Defence-in-depth: a generic error
+    message would lose forensic value."""
+    _, audit_index, _, snapshotter, reconstructor = two_tenant_replay_system
+    audit_id_a = uuid.uuid4()
+    audit_id_b = uuid.uuid4()
+    await _seed_one_for_tenant(
+        snapshotter, tenant_id=_TENANT_A, audit_id=audit_id_a
+    )
+    await _seed_one_for_tenant(
+        snapshotter, tenant_id=_TENANT_B, audit_id=audit_id_b
+    )
+
+    # Tamper the audit-index
+    storage_key_b = audit_index._items[audit_id_b]
+    audit_index._items[audit_id_a] = storage_key_b
+
+    # Capture the exception to inspect the message
+    with pytest.raises(ReconstructorAuditIdMismatch) as exc_info:
+        await reconstructor.reconstruct(audit_id_a)
+
+    msg = str(exc_info.value)
+    assert str(audit_id_a) in msg, (
+        "exception message must mention the REQUESTED audit_id"
+    )
+    assert str(audit_id_b) in msg, (
+        "exception message must mention the ACTUAL audit_id (the one "
+        "found at the tampered storage_key)"
+    )
+    assert "tampering" in msg or "substitution" in msg, (
+        "exception message must hint at the attack class"
+    )
