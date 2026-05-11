@@ -1,5 +1,6 @@
 import {
   type AgentRegisterResponse,
+  type AuditQueryResponse,
   type DossierGenerateResponse,
   type DossierGetResponse,
   type ReplayResponse,
@@ -10,6 +11,7 @@ import {
   type WorkflowListResponse,
   type WorkflowRegisterResponse,
   parseAgentRegisterResponse,
+  parseAuditQueryResponse,
   parseDossierGenerateResponse,
   parseDossierGetResponse,
   parseReplayResponse,
@@ -329,6 +331,13 @@ export class ToolsClient {
   }
 }
 
+/**
+ * CP-82: kwargs for AuditClient.query. No wire-format fix needed:
+ * the CP-51 request shape was already correct -- server route uses
+ * Query(..., alias='from') + Query(..., alias='to') so wire keys
+ * are literally 'from' and 'to'. Pure addition of typed-return path
+ * mirroring Python CP-81.
+ */
 interface AuditQueryArgs {
   workflowId: string;
   /** ISO-8601 timestamp string. */
@@ -340,8 +349,17 @@ interface AuditQueryArgs {
 export class AuditClient {
   constructor(private readonly config: InternalRequestConfig) {}
 
-  async query(args: AuditQueryArgs): Promise<unknown> {
-    return requestJson(this.config, {
+  // CP-82 query() function overloads for opt-in typed return.
+  async query(
+    args: AuditQueryArgs & { returnTyped: true },
+  ): Promise<AuditQueryResponse>;
+  async query(
+    args: AuditQueryArgs & { returnTyped?: false },
+  ): Promise<unknown>;
+  async query(
+    args: AuditQueryArgs & { returnTyped?: boolean },
+  ): Promise<unknown | AuditQueryResponse> {
+    const data = await requestJson(this.config, {
       method: 'GET',
       path: '/v1/control/audit',
       params: {
@@ -350,6 +368,10 @@ export class AuditClient {
         to: args.toTimestamp,
       },
     });
+    if (args.returnTyped === true) {
+      return parseAuditQueryResponse(data);
+    }
+    return data;
   }
 }
 

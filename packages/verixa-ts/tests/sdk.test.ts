@@ -588,6 +588,9 @@ describe('tools', () => {
 });
 
 describe('audit', () => {
+  // CP-82 verified the server route uses Query(..., alias='from') +
+  // Query(..., alias='to'); the wire keys ARE 'from' and 'to'. No
+  // wire-format fix needed (CP-51 was already correct).
   it('query sends params as query string', async () => {
     const { client, captured } = makeClient({
       body: { entries: [], total: 0 },
@@ -601,6 +604,47 @@ describe('audit', () => {
     expect(url).toContain(`workflow_id=${WORKFLOW}`);
     expect(url).toContain('from=2026-05-01');
     expect(url).toContain('to=2026-05-11');
+  });
+
+  it('query with returnTyped:true returns AuditQueryResponse', async () => {
+    // CP-82 opt-in: typed return with frozen readonly entries array.
+    const auditId = '00000000-0000-0000-0000-000000000003';
+    const { client } = makeClient({
+      body: {
+        entries: [
+          {
+            audit_id: auditId,
+            workflow_id: WORKFLOW,
+            decision: 'allow',
+            risk_score: 0.12,
+            risk_classification: 'low',
+            triad_invoked: false,
+            timestamp: '2026-05-11T22:00:00Z',
+          },
+        ],
+        total: 1,
+        workflow_id: WORKFLOW,
+        from_timestamp: '2026-05-01T00:00:00Z',
+        to_timestamp: '2026-05-11T00:00:00Z',
+      },
+    });
+    const result = await client.audit.query({
+      workflowId: WORKFLOW,
+      fromTimestamp: '2026-05-01T00:00:00Z',
+      toTimestamp: '2026-05-11T00:00:00Z',
+      returnTyped: true,
+    });
+    expect(result.total).toBe(1);
+    expect(result.workflowId).toBe(WORKFLOW);
+    expect(result.entries.length).toBe(1);
+    expect(result.entries[0]?.auditId).toBe(auditId);
+    expect(result.entries[0]?.decision).toBe('allow');
+    expect(result.entries[0]?.triadInvoked).toBe(false);
+    expect(result.entries[0]?.timestamp).toBeInstanceOf(Date);
+    expect(result.fromTimestamp).toBeInstanceOf(Date);
+    expect(result.toTimestamp).toBeInstanceOf(Date);
+    // Frozen immutable array (mirrors Python tuple-not-list).
+    expect(Object.isFrozen(result.entries)).toBe(true);
   });
 });
 
