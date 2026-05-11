@@ -7,6 +7,10 @@ deployed Verixa control plane.
 Public SDK surface (re-exported from sdk.py for ergonomic imports):
 
     from verixa import VerixaClient, VerixaError, VerixaHttpError
+
+Typed response envelopes (re-exported from envelopes.py):
+
+    from verixa import WorkflowRegisterResponse, AuditEntry, ...
 """
 
 __version__ = "0.1.0"
@@ -14,9 +18,11 @@ __author__ = "v_sen"
 __license__ = "MIT"
 
 from verixa.envelopes import (
+    AgentRegisterResponse,
     AuditEntry,
     AuditQueryResponse,
     InvalidEnvelopeError,
+    ToolRegisterResponse,
     WorkflowListResponse,
     WorkflowRegisterResponse,
     WorkflowSummary,
@@ -37,6 +43,7 @@ from verixa.sdk import (
 )
 
 __all__ = [
+    "AgentRegisterResponse",
     "AgentsClient",
     "AuditClient",
     "AuditEntry",
@@ -45,6 +52,7 @@ __all__ = [
     "DossierClient",
     "InvalidEnvelopeError",
     "ReplayClient",
+    "ToolRegisterResponse",
     "ToolsClient",
     "VerixaClient",
     "VerixaConnectionError",

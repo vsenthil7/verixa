@@ -178,7 +178,8 @@ def test_top_level_imports_resolve() -> None:
 def test_all_lists_match_advertised_symbols() -> None:
     """The __all__ list pins the wildcard-import surface.
 
-    CP-61 added 6 envelope dataclass exports (typed response models)."""
+    CP-61 added 6 envelope dataclass exports;
+    CP-62 added 2 more (AgentRegisterResponse + ToolRegisterResponse)."""
     import verixa
 
     expected = {
@@ -202,6 +203,9 @@ def test_all_lists_match_advertised_symbols() -> None:
         "WorkflowListResponse",
         "WorkflowRegisterResponse",
         "WorkflowSummary",
+        # Typed envelope dataclasses (2 more) added by CP-62
+        "AgentRegisterResponse",
+        "ToolRegisterResponse",
     }
     assert set(verixa.__all__) == expected
 

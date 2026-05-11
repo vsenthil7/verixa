@@ -1,38 +1,48 @@
-"""CP-61 -- typed envelope dataclasses for SDK response parsing.
+"""CP-61/CP-62 -- typed envelope dataclasses for SDK response parsing.
 
 Closes the v0.4.0 roadmap promise from both SDK CHANGELOGs: customers
 can opt into typed return values instead of plain ``dict[str, Any]``.
 
 Design notes:
 
-  - Lightweight: ``@dataclass(frozen=True)`` with no runtime dependency
-    (Pydantic is intentionally not pulled in; customers who already use
-    Pydantic v2 can wrap our dicts themselves).
-  - Opt-in: existing SDK methods keep returning ``dict[str, Any]``; new
-    helper functions ``parse_workflow_register_response`` etc. take a
-    response dict and return the typed object. The next SDK MINOR
-    release (v0.2.0) will add ``register(..., return_typed=True)``
-    overloads; v1.0.0 will flip the default to ``return_typed=True``.
-    This deprecation path is documented in CHANGELOG Unreleased.
-  - Conservative: only the THREE most-used response envelopes are
-    covered in this commit (Workflow register/list + AuditEntry). Other
-    envelopes follow incrementally as customer demand grows -- ship
-    less, ship correctly.
-  - Defensive: each ``from_dict`` raises ``InvalidEnvelopeError`` with
-    a path-prefix ("field {name}: ...") so a server returning an
+  - Lightweight: ``@dataclass(frozen=True, slots=True)`` with no
+    runtime dependency on Pydantic (customers who use Pydantic v2
+    elsewhere can wrap our dicts themselves).
+  - Opt-in: existing SDK methods still return ``dict[str, Any]``;
+    new helper ``.from_dict`` classmethods take a response dict and
+    return the typed object. The next SDK MINOR release (v0.2.0)
+    will add ``register(..., return_typed=True)`` overloads; v1.0.0
+    will flip the default.
+  - Pinned to wire format: every field name + type here MUST match
+    what ``apps/control-plane-api/verixa_control_plane/envelopes.py``
+    emits on the wire. CP-62 corrected the Phase-0 CP-61 mismatch
+    where WorkflowRegisterResponse had ``description + owner_tenant_id``
+    fields the server does not emit (it emits ``sector``); the
+    correction is contract-driven.
+  - Defensive: each ``from_dict`` raises ``InvalidEnvelopeError``
+    with a ``field {name}: ...`` prefix so a server returning an
     unexpected shape gives a debuggable error rather than KeyError.
   - Tolerant of EXTRA fields: server-side may add new optional fields
-    (forward-compat); the parser ignores them. MISSING required fields
-    are a hard error.
+    (forward-compat); the parser ignores them. MISSING required
+    fields are a hard error.
+  - Strict invariants: naive datetimes rejected (Verixa requires
+    TZ-aware everywhere); bool-as-int rejected (so True/False
+    cannot be silently coerced into 1/0 totals); UUID-strings
+    parsed but UUID-objects accepted as-is.
 
-Subset shipped here:
+Subset shipped:
 
-  - WorkflowRegisterResponse
-  - WorkflowSummary + WorkflowListResponse
-  - AuditEntry + AuditQueryResponse
+  CP-61 (workflow + audit core):
+    - WorkflowRegisterResponse
+    - WorkflowSummary + WorkflowListResponse
+    - AuditEntry + AuditQueryResponse
 
-The remaining envelopes (Agent, Tool, Replay, Dossier, Webhook) get
-the same treatment in subsequent commits as the type signatures land.
+  CP-62 (registry: agent + tool):
+    - AgentRegisterResponse
+    - ToolRegisterResponse
+
+The remaining envelopes (Replay, Dossier, Webhook) follow in
+subsequent commits as the type signatures land.
 """
 
 from __future__ import annotations
@@ -79,6 +89,15 @@ def _as_uuid(value: Any, name: str) -> uuid.UUID:
         ) from e
 
 
+def _as_uuid_list(value: Any, name: str) -> tuple[uuid.UUID, ...]:
+    """Parse a list-of-uuids into an immutable tuple."""
+    if not isinstance(value, list):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected list of uuids, got {type(value).__name__}"
+        )
+    return tuple(_as_uuid(v, f"{name}[{i}]") for i, v in enumerate(value))
+
+
 def _as_datetime(value: Any, name: str) -> datetime:
     """Parse an ISO-8601 timestamp (with TZ) into datetime.
 
@@ -120,12 +139,6 @@ def _as_str(value: Any, name: str) -> str:
     return value
 
 
-def _as_optional_str(value: Any, name: str) -> str | None:
-    if value is None:
-        return None
-    return _as_str(value, name)
-
-
 def _as_int(value: Any, name: str) -> int:
     # bool is an int subclass in Python; reject explicitly to avoid
     # silently coercing True/False into 1/0.
@@ -136,19 +149,47 @@ def _as_int(value: Any, name: str) -> int:
     return value
 
 
+def _as_float(value: Any, name: str) -> float:
+    # bool is int subclass + int is float-compatible; accept int as
+    # float (server may serialise 0.5 -> 0.5 but 0.0 -> 0). Reject bool.
+    if isinstance(value, bool):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected number, got bool"
+        )
+    if not isinstance(value, int | float):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected number, got {type(value).__name__}"
+        )
+    return float(value)
+
+
+def _as_bool(value: Any, name: str) -> bool:
+    """Strict bool; reject int 0/1 since wire format uses true/false."""
+    if not isinstance(value, bool):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected bool, got {type(value).__name__}"
+        )
+    return value
+
+
 # ---------------------------------------------------------------------------
-# Workflow envelopes
+# Workflow envelopes (CP-61)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowRegisterResponse:
-    """Server response to ``POST /v1/control/workflows``."""
+    """Server response to ``POST /v1/control/workflows``.
+
+    Matches apps/control-plane-api/verixa_control_plane/envelopes.py
+    WorkflowRegisterResponse exactly: workflow_id + name + sector +
+    created_at. The Phase-0 CP-61 mismatch (description +
+    owner_tenant_id fields the server does not emit) is corrected here.
+    """
 
     workflow_id: uuid.UUID
     name: str
-    description: str | None
-    owner_tenant_id: uuid.UUID
+    sector: str
     created_at: datetime
 
     @classmethod
@@ -159,13 +200,11 @@ class WorkflowRegisterResponse:
                 f"got {type(data).__name__}"
             )
         return cls(
-            workflow_id=_as_uuid(_require(data, "workflow_id", "workflow_id"), "workflow_id"),
-            name=_as_str(_require(data, "name", "name"), "name"),
-            description=_as_optional_str(data.get("description"), "description"),
-            owner_tenant_id=_as_uuid(
-                _require(data, "owner_tenant_id", "owner_tenant_id"),
-                "owner_tenant_id",
+            workflow_id=_as_uuid(
+                _require(data, "workflow_id", "workflow_id"), "workflow_id"
             ),
+            name=_as_str(_require(data, "name", "name"), "name"),
+            sector=_as_str(_require(data, "sector", "sector"), "sector"),
             created_at=_as_datetime(
                 _require(data, "created_at", "created_at"), "created_at"
             ),
@@ -174,12 +213,17 @@ class WorkflowRegisterResponse:
 
 @dataclass(frozen=True, slots=True)
 class WorkflowSummary:
-    """One workflow entry in a list response."""
+    """One workflow entry in a list response.
+
+    Matches server-side WorkflowSummary: workflow_id + name + sector +
+    risk_threshold_escalate + agent_count + created_at.
+    """
 
     workflow_id: uuid.UUID
     name: str
-    description: str | None
-    owner_tenant_id: uuid.UUID
+    sector: str
+    risk_threshold_escalate: float
+    agent_count: int
     created_at: datetime
 
     @classmethod
@@ -189,12 +233,21 @@ class WorkflowSummary:
                 f"expected dict for WorkflowSummary, got {type(data).__name__}"
             )
         return cls(
-            workflow_id=_as_uuid(_require(data, "workflow_id", "workflow_id"), "workflow_id"),
+            workflow_id=_as_uuid(
+                _require(data, "workflow_id", "workflow_id"), "workflow_id"
+            ),
             name=_as_str(_require(data, "name", "name"), "name"),
-            description=_as_optional_str(data.get("description"), "description"),
-            owner_tenant_id=_as_uuid(
-                _require(data, "owner_tenant_id", "owner_tenant_id"),
-                "owner_tenant_id",
+            sector=_as_str(_require(data, "sector", "sector"), "sector"),
+            risk_threshold_escalate=_as_float(
+                _require(
+                    data,
+                    "risk_threshold_escalate",
+                    "risk_threshold_escalate",
+                ),
+                "risk_threshold_escalate",
+            ),
+            agent_count=_as_int(
+                _require(data, "agent_count", "agent_count"), "agent_count"
             ),
             created_at=_as_datetime(
                 _require(data, "created_at", "created_at"), "created_at"
@@ -221,9 +274,7 @@ class WorkflowListResponse:
             raise InvalidEnvelopeError(
                 f"field workflows: expected list, got {type(items).__name__}"
             )
-        parsed = tuple(
-            WorkflowSummary.from_dict(item) for item in items
-        )
+        parsed = tuple(WorkflowSummary.from_dict(item) for item in items)
         return cls(
             workflows=parsed,
             total=_as_int(_require(data, "total", "total"), "total"),
@@ -231,20 +282,28 @@ class WorkflowListResponse:
 
 
 # ---------------------------------------------------------------------------
-# Audit envelopes
+# Audit envelopes (CP-61)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class AuditEntry:
-    """One entry from the audit ledger."""
+    """One entry from the audit ledger as exposed by the Control Plane API.
+
+    Matches the server's AuditEntry redacted view: audit_id +
+    workflow_id + decision (allow/deny/escalate) + risk_score [0,1] +
+    risk_classification (low/medium/high/critical) + triad_invoked +
+    timestamp. Not the full ledger row (which carries hash chain links
+    + Ed25519 signatures); that is the ReplayResponse.
+    """
 
     audit_id: uuid.UUID
     workflow_id: uuid.UUID
+    decision: str
+    risk_score: float
+    risk_classification: str
+    triad_invoked: bool
     timestamp: datetime
-    event_type: str
-    payload: dict[str, Any]
-    signature: str
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AuditEntry:
@@ -252,25 +311,31 @@ class AuditEntry:
             raise InvalidEnvelopeError(
                 f"expected dict for AuditEntry, got {type(data).__name__}"
             )
-        payload = _require(data, "payload", "payload")
-        if not isinstance(payload, dict):
-            raise InvalidEnvelopeError(
-                f"field payload: expected dict, got {type(payload).__name__}"
-            )
         return cls(
-            audit_id=_as_uuid(_require(data, "audit_id", "audit_id"), "audit_id"),
+            audit_id=_as_uuid(
+                _require(data, "audit_id", "audit_id"), "audit_id"
+            ),
             workflow_id=_as_uuid(
                 _require(data, "workflow_id", "workflow_id"), "workflow_id"
             ),
+            decision=_as_str(
+                _require(data, "decision", "decision"), "decision"
+            ),
+            risk_score=_as_float(
+                _require(data, "risk_score", "risk_score"), "risk_score"
+            ),
+            risk_classification=_as_str(
+                _require(
+                    data, "risk_classification", "risk_classification"
+                ),
+                "risk_classification",
+            ),
+            triad_invoked=_as_bool(
+                _require(data, "triad_invoked", "triad_invoked"),
+                "triad_invoked",
+            ),
             timestamp=_as_datetime(
                 _require(data, "timestamp", "timestamp"), "timestamp"
-            ),
-            event_type=_as_str(
-                _require(data, "event_type", "event_type"), "event_type"
-            ),
-            payload=payload,
-            signature=_as_str(
-                _require(data, "signature", "signature"), "signature"
             ),
         )
 
@@ -281,6 +346,9 @@ class AuditQueryResponse:
 
     entries: tuple[AuditEntry, ...]
     total: int
+    workflow_id: uuid.UUID
+    from_timestamp: datetime
+    to_timestamp: datetime
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AuditQueryResponse:
@@ -298,13 +366,120 @@ class AuditQueryResponse:
         return cls(
             entries=parsed,
             total=_as_int(_require(data, "total", "total"), "total"),
+            workflow_id=_as_uuid(
+                _require(data, "workflow_id", "workflow_id"), "workflow_id"
+            ),
+            from_timestamp=_as_datetime(
+                _require(data, "from_timestamp", "from_timestamp"),
+                "from_timestamp",
+            ),
+            to_timestamp=_as_datetime(
+                _require(data, "to_timestamp", "to_timestamp"),
+                "to_timestamp",
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Registry envelopes (CP-62 -- agent + tool)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class AgentRegisterResponse:
+    """Server response to ``POST /v1/control/agents``.
+
+    Matches server-side AgentRegisterResponse: agent_id + workflow_id +
+    spiffe_id + role + created_at. The agent is an operational entity
+    acting under the workflow; spiffe_id is the SPIFFE identity
+    (Phase-0 bypasses SPIFFE verification; the field is recorded for
+    forward compatibility with the CP-53 mTLS Protocol surface).
+    """
+
+    agent_id: uuid.UUID
+    workflow_id: uuid.UUID
+    spiffe_id: str
+    role: str
+    created_at: datetime
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AgentRegisterResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for AgentRegisterResponse, "
+                f"got {type(data).__name__}"
+            )
+        return cls(
+            agent_id=_as_uuid(
+                _require(data, "agent_id", "agent_id"), "agent_id"
+            ),
+            workflow_id=_as_uuid(
+                _require(data, "workflow_id", "workflow_id"), "workflow_id"
+            ),
+            spiffe_id=_as_str(
+                _require(data, "spiffe_id", "spiffe_id"), "spiffe_id"
+            ),
+            role=_as_str(_require(data, "role", "role"), "role"),
+            created_at=_as_datetime(
+                _require(data, "created_at", "created_at"), "created_at"
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ToolRegisterResponse:
+    """Server response to ``POST /v1/control/tools``.
+
+    Matches server-side ToolRegisterResponse: tool_id + name +
+    is_active + allowed_workflow_ids (empty list = any workflow,
+    non-empty = restricted) + created_at. The tool is something the
+    agent may invoke (subject to firewall + per-tenant ACL).
+
+    allowed_workflow_ids is returned as a tuple (immutable) so
+    customers cannot mutate the parsed result.
+    """
+
+    tool_id: uuid.UUID
+    name: str
+    is_active: bool
+    allowed_workflow_ids: tuple[uuid.UUID, ...]
+    created_at: datetime
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ToolRegisterResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for ToolRegisterResponse, "
+                f"got {type(data).__name__}"
+            )
+        return cls(
+            tool_id=_as_uuid(
+                _require(data, "tool_id", "tool_id"), "tool_id"
+            ),
+            name=_as_str(_require(data, "name", "name"), "name"),
+            is_active=_as_bool(
+                _require(data, "is_active", "is_active"), "is_active"
+            ),
+            allowed_workflow_ids=_as_uuid_list(
+                _require(
+                    data,
+                    "allowed_workflow_ids",
+                    "allowed_workflow_ids",
+                ),
+                "allowed_workflow_ids",
+            ),
+            created_at=_as_datetime(
+                _require(data, "created_at", "created_at"), "created_at"
+            ),
         )
 
 
 __all__ = [
+    "AgentRegisterResponse",
     "AuditEntry",
     "AuditQueryResponse",
     "InvalidEnvelopeError",
+    "ToolRegisterResponse",
     "WorkflowListResponse",
     "WorkflowRegisterResponse",
     "WorkflowSummary",
