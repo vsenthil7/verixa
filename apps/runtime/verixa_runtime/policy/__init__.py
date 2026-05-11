@@ -12,7 +12,8 @@ CP-8 sub-CPs:
   CP-8.2 -- financial-services pack
   CP-8.3 -- Python OPA HTTP client
   CP-8.4 -- bundle signing + signed-bundle verification
-  CP-8.5 -- Redis 5s decision cache wrapper (this commit)
+  CP-8.5 -- Redis 5s decision cache wrapper
+CP-45 -- bundle distribution server (this commit)
 """
 
 from verixa_runtime.policy.bundle import (  # noqa: F401
@@ -24,6 +25,15 @@ from verixa_runtime.policy.bundle import (  # noqa: F401
     discover_bundles,
     load_bundle,
     load_fixtures,
+)
+from verixa_runtime.policy.bundle_server import (  # noqa: F401
+    BundleArtifact,
+    BundleNameInvalid,
+    BundleNotFound,
+    BundleServer,
+    BundleServerError,
+    BundleUnsigned,
+    valid_bundle_name,
 )
 from verixa_runtime.policy.cache import (  # noqa: F401
     CACHE_KEY_PREFIX,
@@ -49,8 +59,14 @@ from verixa_runtime.policy.signing import (  # noqa: F401
 )
 
 __all__ = [
+    "BundleArtifact",
+    "BundleNameInvalid",
+    "BundleNotFound",
+    "BundleServer",
+    "BundleServerError",
     "BundleSignatures",
     "BundleSignaturesError",
+    "BundleUnsigned",
     "CACHE_KEY_PREFIX",
     "CACHE_TTL_SECONDS",
     "CacheStats",
@@ -72,5 +88,6 @@ __all__ = [
     "load_bundle",
     "load_fixtures",
     "sign_bundle",
+    "valid_bundle_name",
     "verify_bundle_signatures",
 ]
