@@ -19,17 +19,21 @@ The defences in Verixa Phase 0:
   - reasoning_chain_summary capped (discovered at CP-30 RED at 189ebf4)
   - bundle.canonicalise produces deterministic output regardless of
     nesting depth (no recursion explosion in our code)
+  - ReplayBundle rejects empty doc_id or empty hash in retrieved_documents
+    (Phase-1 gap closed at CP-30.1 commit d5ca5da on 2026-05-11 11:54 UK;
+    test_empty_doc_id_in_replay_bundle_rejected was xfail-strict between
+    189ebf4 and d5ca5da, now positive)
 
 Adversarial framing: an attacker submits "transfer 50" with a 1 MB
 reasoning_chain_summary, or a 200-level nested envelope, or a 1000-
 element retrieved_documents array. Defences are: caps where stored,
 preservation + linear scaling where unbounded.
 
-CP-30 RED finding (189ebf4 -> THIS commit GREEN): the
-reasoning_chain_summary cap and spiffe_id cap were not visible from
+CP-30 RED finding (189ebf4 -> 004b104 GREEN -> d5ca5da Phase-1 gap close):
+the reasoning_chain_summary cap and spiffe_id cap were not visible from
 the envelope module docstring; this test file makes them executable
-documentation. The empty doc_id in ReplayBundle slips past the
-validator -- known Phase 1 gap, marked skip below with a tracker ref.
+documentation. The empty doc_id in ReplayBundle WAS a real Phase-1 gap;
+now closed by the validator fix.
 """
 
 from __future__ import annotations
@@ -149,23 +153,22 @@ def test_risk_score_below_zero_rejected_in_bundle() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Known Phase-1 gap: empty doc_id in ReplayBundle
+# Phase-1 gap NOW CLOSED: empty doc_id in ReplayBundle (CP-30.1 d5ca5da)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Phase 1 gap: ReplayBundle accepts empty doc_id in "
-        "retrieved_documents tuple. The retrieved_documents validator "
-        "checks tuple shape + type but not 'string-non-empty'. Surfaced "
-        "by CP-30 RED at 189ebf4. Phase 1 ticket: add minlength=1 to "
-        "doc_id and hash check in bundle.__post_init__."
-    ),
-    strict=True,
-)
 def test_empty_doc_id_in_replay_bundle_rejected() -> None:
-    """Phase 1 gap test. xfail strict so when the fix lands the test
-    flips to GREEN and we know the gap closed."""
+    """ReplayBundle MUST reject empty doc_id strings in retrieved_documents.
+
+    Phase-1 gap closure history:
+      - CP-30 RED 189ebf4: test wrote, ReplayBundle did NOT reject empty
+        doc_id; pytest reported FAILED.
+      - CP-30 size-limits GREEN 004b104: test marked @xfail(strict=True)
+        with Phase-1 ticket text in reason; CI ran cleanly.
+      - CP-30.1 d5ca5da: ReplayBundle.__post_init__ now rejects empty
+        doc_id and empty hash explicitly.
+      - This commit: xfail marker removed; test now asserts the correct
+        defence as a positive expectation."""
     with pytest.raises(ValueError, match="retrieved_documents"):
         ReplayBundle(
             audit_id=_AUDIT_ID,
@@ -174,6 +177,21 @@ def test_empty_doc_id_in_replay_bundle_rejected() -> None:
             risk_score=0.1,
             request_envelope={"a": 1},
             retrieved_documents=(("", "a" * 64),),
+            timestamp_unix_ns=1_700_000_000_000_000_000,
+        )
+
+
+def test_empty_hash_in_replay_bundle_rejected() -> None:
+    """And the symmetric case: empty content_sha256_hex is also
+    rejected by the same validator clause (CP-30.1 d5ca5da)."""
+    with pytest.raises(ValueError, match="retrieved_documents"):
+        ReplayBundle(
+            audit_id=_AUDIT_ID,
+            tenant_id=_TENANT_ID,
+            decision="allow",
+            risk_score=0.1,
+            request_envelope={"a": 1},
+            retrieved_documents=(("doc_001", ""),),
             timestamp_unix_ns=1_700_000_000_000_000_000,
         )
 
