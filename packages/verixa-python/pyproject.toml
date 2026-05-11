@@ -1,0 +1,88 @@
+# CP-58 -- per-package pyproject.toml for the verixa-python SDK.
+#
+# This file makes `packages/verixa-python` independently buildable +
+# publishable to PyPI via `python -m build`. The monorepo root keeps its
+# own Poetry-based pyproject.toml for development; this one is the
+# customer-facing PEP 621 manifest that PyPI consumes.
+#
+# Build backend choice: hatchling. Reasons:
+#   - PEP 517 native (no Poetry runtime dependency at build time)
+#   - Smaller wheel than poetry-core (~2KB build script vs ~150KB)
+#   - First-class py.typed marker handling via hatch-vcs/hatch-fancy-pypi-readme
+#   - Used by FastAPI, Pydantic v2, and other major PyPI packages -- battle-tested
+#
+# Version source: pinned literally in [project].version below + asserted equal
+# to verixa.__version__ + matches the latest dated CHANGELOG release header.
+# All three locations are checked by the test suite to prevent drift.
+
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "verixa"
+version = "0.1.0"
+description = "Async Python SDK for the Verixa Control Plane API (audit + governance for AI agent workflows)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [
+    { name = "v_sen", email = "v_sen@verixa.dev" },
+]
+keywords = [
+    "verixa",
+    "audit",
+    "ai-governance",
+    "compliance",
+    "opa",
+    "agents",
+    "llm-ops",
+    "sdk",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
+    "Topic :: Security",
+    "Typing :: Typed",
+    "Framework :: AsyncIO",
+]
+dependencies = [
+    "httpx>=0.27.2,<0.28.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/v-sen/verixa"
+Documentation = "https://github.com/v-sen/verixa/tree/main/packages/verixa-python#readme"
+Repository = "https://github.com/v-sen/verixa"
+Issues = "https://github.com/v-sen/verixa/issues"
+Changelog = "https://github.com/v-sen/verixa/blob/main/packages/verixa-python/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+# Ship the `verixa` package (with py.typed marker for PEP 561).
+packages = ["verixa"]
+
+[tool.hatch.build.targets.sdist]
+# Source distribution carries the README + CHANGELOG + LICENSE + tests
+# but NOT the _backup/ scratch folders.
+include = [
+    "verixa",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+exclude = [
+    "_backup",
+    "**/_backup",
+    "**/__pycache__",
+    "**/*.pyc",
+]
