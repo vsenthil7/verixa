@@ -41,7 +41,13 @@ was governed — not a claim that the action is provably correct.
 
 ## See it working in 30 seconds
 
-The simplest demo. No dependencies beyond Docker + Python 3.12:
+**No setup needed — the live HF Space is up:**
+
+> **<https://vsenthil7-verixa-control-plane.hf.space/docs>**
+
+That lands on the Swagger UI with every endpoint already wired and *Try it out* buttons next to each. The container is pre-loaded with a small-bank loan-approval scenario.
+
+If you'd rather run it locally:
 
 ```bash
 docker build -f deploy/huggingface/Dockerfile -t verixa-cp .
@@ -49,8 +55,7 @@ docker run -p 7860:7860 verixa-cp
 # then open http://localhost:7860/docs
 ```
 
-That's the same image the public Hugging Face Space runs. The container
-boots **pre-loaded with a small-bank loan-approval scenario**: one workflow,
+Either way, the container boots **pre-loaded with a small-bank loan-approval scenario**: one workflow,
 one agent, four tools, three historical decisions across the risk spectrum,
 one pre-signed Ed25519 dossier. Every endpoint at `/docs` has a *Try it
 out* button and returns realistic data on the first click.
@@ -191,7 +196,7 @@ CI: GitHub Actions runs all three suites on every push and pull request to
   - Hugging Face Special Prize — HF Spaces deployment + Hub model use
   - Qwen Special Reward — Qwen3 family powers the reviewer triad
   - Build-in-Public — public repo with full granular commit history
-- **Live demo:** _(HF Space URL — pending CP-17.2 deploy)_
+- **Live demo:** **<https://huggingface.co/spaces/vsenthil7/verixa-control-plane>** (Swagger UI at [`/docs`](https://vsenthil7-verixa-control-plane.hf.space/docs))
 - **Demo video:** _(YouTube URL — pending CP-19)_
 - **Submission:** _(lablab.ai URL — pending CP-20)_
 
