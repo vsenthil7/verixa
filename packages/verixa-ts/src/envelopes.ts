@@ -44,8 +44,13 @@
  *     - AgentRegisterResponse + parseAgentRegisterResponse
  *     - ToolRegisterResponse + parseToolRegisterResponse
  *
- * The remaining envelopes (Replay, Dossier, Webhook) follow in
- * subsequent commits as the cross-language symmetry is built up.
+ *   CP-67 (replay + dossier; mirrors Python CP-63):
+ *     - ReplayResponse + parseReplayResponse
+ *     - DossierGenerateResponse + parseDossierGenerateResponse
+ *     - DossierGetResponse + parseDossierGetResponse
+ *
+ * The remaining envelopes (Webhook subscription + delivery) follow
+ * in CP-68 to complete the typed-response surface on the TS side.
  */
 
 // ---------------------------------------------------------------------------
@@ -217,6 +222,64 @@ function asUuidList(value: unknown, name: string): readonly string[] {
     );
   }
   const out: string[] = value.map((v, i) => asUuid(v, `${name}[${i}]`));
+  return Object.freeze(out);
+}
+
+/**
+ * Strict record/object check; rejects null, array, Date, primitives.
+ * Used for nested envelope dicts the SDK passes through opaquely
+ * (the customer can drill into them or wrap with their own model).
+ * Mirrors Python verixa.envelopes._as_dict.
+ */
+function asUnknownRecord(
+  value: unknown,
+  name: string,
+): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new InvalidEnvelopeError(
+      `field ${name}: expected dict, got ${typeof value}`,
+    );
+  }
+  return value;
+}
+
+/** Like asUnknownRecord but accepts null (for optional nested envelopes). */
+function asOptionalRecord(
+  value: unknown,
+  name: string,
+): Record<string, unknown> | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return asUnknownRecord(value, name);
+}
+
+/**
+ * Parse an array-of-dicts into an immutable frozen array of plain
+ * record objects. Inner records pass through unparsed (each is opaque
+ * to the SDK surface; e.g. retrieved_documents is an array of
+ * {doc_id, content_sha256} items but ReplayResponse exposes them as
+ * plain records). Index-prefixed field name on per-element failure
+ * (e.g. `retrieved_documents[1]`) for debuggability. Mirrors Python
+ * verixa.envelopes._as_list_of_dict.
+ */
+function asListOfRecord(
+  value: unknown,
+  name: string,
+): readonly Record<string, unknown>[] {
+  if (!Array.isArray(value)) {
+    throw new InvalidEnvelopeError(
+      `field ${name}: expected array of dicts, got ${typeof value}`,
+    );
+  }
+  const out: Record<string, unknown>[] = value.map((v, i) => {
+    if (!isRecord(v)) {
+      throw new InvalidEnvelopeError(
+        `field ${name}[${i}]: expected dict, got ${typeof v}`,
+      );
+    }
+    return v;
+  });
   return Object.freeze(out);
 }
 
@@ -526,5 +589,195 @@ export function parseToolRegisterResponse(
       requireField(data, 'created_at', 'created_at'),
       'created_at',
     ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Replay envelopes (CP-67; mirrors Python CP-63)
+// ---------------------------------------------------------------------------
+
+/**
+ * Server response to `GET /v1/control/replay`.
+ *
+ * Reconstructed decision context for an audit_id. Mirrors the
+ * server-side ReplayResponse: full request envelope + retrieved
+ * documents + tool I/O + policy evaluations + optional triad review
+ * + nanosecond-precision timestamp.
+ *
+ * Nested records pass through opaquely (requestEnvelope is the
+ * original decision payload; retrievedDocuments are
+ * {doc_id, content_sha256} pairs; toolIo captures every tool call
+ * request+response; policyEvaluations is one entry per Rego package
+ * evaluated). Customers can drill into them or wrap with their own
+ * model. All collections are frozen readonly arrays.
+ *
+ * triadReview is `null` when the decision did NOT go through triad
+ * review (i.e. AuditEntry.triadInvoked was false).
+ */
+export interface ReplayResponse {
+  readonly auditId: string;
+  readonly tenantId: string;
+  readonly decision: string;
+  readonly riskScore: number;
+  readonly requestEnvelope: Record<string, unknown>;
+  readonly retrievedDocuments: readonly Record<string, unknown>[];
+  readonly toolIo: readonly Record<string, unknown>[];
+  readonly policyEvaluations: readonly Record<string, unknown>[];
+  readonly triadReview: Record<string, unknown> | null;
+  readonly timestampUnixNs: number;
+}
+
+export function parseReplayResponse(data: unknown): ReplayResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for ReplayResponse, got ${typeof data}`,
+    );
+  }
+  return {
+    auditId: asUuid(
+      requireField(data, 'audit_id', 'audit_id'),
+      'audit_id',
+    ),
+    tenantId: asUuid(
+      requireField(data, 'tenant_id', 'tenant_id'),
+      'tenant_id',
+    ),
+    decision: asString(
+      requireField(data, 'decision', 'decision'),
+      'decision',
+    ),
+    riskScore: asFloat(
+      requireField(data, 'risk_score', 'risk_score'),
+      'risk_score',
+    ),
+    requestEnvelope: asUnknownRecord(
+      requireField(data, 'request_envelope', 'request_envelope'),
+      'request_envelope',
+    ),
+    retrievedDocuments: asListOfRecord(
+      requireField(data, 'retrieved_documents', 'retrieved_documents'),
+      'retrieved_documents',
+    ),
+    toolIo: asListOfRecord(
+      requireField(data, 'tool_io', 'tool_io'),
+      'tool_io',
+    ),
+    policyEvaluations: asListOfRecord(
+      requireField(data, 'policy_evaluations', 'policy_evaluations'),
+      'policy_evaluations',
+    ),
+    triadReview: asOptionalRecord(
+      data['triad_review'],
+      'triad_review',
+    ),
+    timestampUnixNs: asInt(
+      requireField(data, 'timestamp_unix_ns', 'timestamp_unix_ns'),
+      'timestamp_unix_ns',
+    ),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Dossier envelopes (CP-67; mirrors Python CP-63)
+// ---------------------------------------------------------------------------
+
+/**
+ * Server response to `POST /v1/control/dossier`.
+ *
+ * Carries enough to fetch the full signed JSON via the follow-up
+ * GET /v1/control/dossier/{id} call.
+ */
+export interface DossierGenerateResponse {
+  readonly dossierId: string;
+  readonly auditId: string;
+  readonly signingKeyId: string;
+  readonly generatedAt: Date;
+}
+
+export function parseDossierGenerateResponse(
+  data: unknown,
+): DossierGenerateResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for DossierGenerateResponse, got ${typeof data}`,
+    );
+  }
+  return {
+    dossierId: asUuid(
+      requireField(data, 'dossier_id', 'dossier_id'),
+      'dossier_id',
+    ),
+    auditId: asUuid(
+      requireField(data, 'audit_id', 'audit_id'),
+      'audit_id',
+    ),
+    signingKeyId: asString(
+      requireField(data, 'signing_key_id', 'signing_key_id'),
+      'signing_key_id',
+    ),
+    generatedAt: asDateTime(
+      requireField(data, 'generated_at', 'generated_at'),
+      'generated_at',
+    ),
+  };
+}
+
+/**
+ * Server response to `GET /v1/control/dossier/{id}`.
+ *
+ * Carries the full SignedDossier inline so the caller can verify it
+ * offline without further round-trips. signatureHex is exactly 128
+ * hex chars (Ed25519 sig = 64 bytes); publicKeyHex is exactly 64 hex
+ * chars (Ed25519 public key = 32 bytes). manifest is opaque to the
+ * SDK -- the caller verifies it via the verixa_runtime crypto
+ * primitives. Lengths are validated by the parser.
+ */
+export interface DossierGetResponse {
+  readonly dossierId: string;
+  readonly auditId: string;
+  readonly manifest: Record<string, unknown>;
+  readonly signatureHex: string;
+  readonly publicKeyHex: string;
+}
+
+export function parseDossierGetResponse(data: unknown): DossierGetResponse {
+  if (!isRecord(data)) {
+    throw new InvalidEnvelopeError(
+      `expected dict for DossierGetResponse, got ${typeof data}`,
+    );
+  }
+  const sig = asString(
+    requireField(data, 'signature_hex', 'signature_hex'),
+    'signature_hex',
+  );
+  if (sig.length !== 128) {
+    throw new InvalidEnvelopeError(
+      `field signature_hex: expected 128 hex chars, got ${sig.length}`,
+    );
+  }
+  const pub = asString(
+    requireField(data, 'public_key_hex', 'public_key_hex'),
+    'public_key_hex',
+  );
+  if (pub.length !== 64) {
+    throw new InvalidEnvelopeError(
+      `field public_key_hex: expected 64 hex chars, got ${pub.length}`,
+    );
+  }
+  return {
+    dossierId: asUuid(
+      requireField(data, 'dossier_id', 'dossier_id'),
+      'dossier_id',
+    ),
+    auditId: asUuid(
+      requireField(data, 'audit_id', 'audit_id'),
+      'audit_id',
+    ),
+    manifest: asUnknownRecord(
+      requireField(data, 'manifest', 'manifest'),
+      'manifest',
+    ),
+    signatureHex: sig,
+    publicKeyHex: pub,
   };
 }
