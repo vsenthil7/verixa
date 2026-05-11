@@ -11,5 +11,5 @@
     "allowJs": true
   },
   "include": ["next-env.d.ts", "src/**/*", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", ".next", "tests"]
+  "exclude": ["node_modules", ".next", "tests", "tests-e2e"]
 }

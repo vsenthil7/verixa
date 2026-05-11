@@ -34,6 +34,11 @@ htmlcov/
 # README + source it assembles is reproducible from deploy/huggingface/.
 hf_space_build/
 
+# --- Playwright E2E artefacts (CP-21) ---
+apps/control-plane-ui/test-results/
+apps/control-plane-ui/playwright-report/
+apps/control-plane-ui/playwright/.cache/
+
 # --- Poetry ---
 poetry.lock.bak
 

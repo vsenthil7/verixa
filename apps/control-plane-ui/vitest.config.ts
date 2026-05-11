@@ -3,6 +3,10 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
     environment: 'happy-dom',
+    // Vitest scans *.test.{ts,tsx} by default; explicitly EXCLUDE
+    // the Playwright tree so unit + E2E runners don't fight over
+    // the same files.
+    exclude: ['**/node_modules/**', '**/tests-e2e/**'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],

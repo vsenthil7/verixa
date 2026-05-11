@@ -11,8 +11,10 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf .next coverage .turbo node_modules/.cache"
+    "clean": "rm -rf .next coverage .turbo node_modules/.cache test-results playwright-report"
   },
   "dependencies": {
     "@verixa/ts": "workspace:*",
@@ -21,6 +23,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

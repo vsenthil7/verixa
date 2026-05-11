@@ -9,6 +9,7 @@ is wired correctly.
 
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -54,3 +55,25 @@ def test_asgi_module_exports_app() -> None:
     """``__all__`` keeps ``app`` as the only public name -- uvicorn
     imports it by attribute lookup, so the surface must stay stable."""
     assert asgi.__all__ == ["app"]
+
+
+def test_run_seed_in_thread_propagates_exceptions(monkeypatch) -> None:
+    """If the seed coroutine raises, _run_seed_in_thread re-raises
+    it on the calling thread instead of swallowing it.
+
+    This guard exists because the seed runs at import time -- a
+    silent failure here would mean the FastAPI app boots without
+    its demo data and judges hit empty endpoints."""
+    import verixa_control_plane.asgi as asgi_mod
+
+    class _BoomState:
+        pass
+
+    async def _boom(_state):  # noqa: ANN001 -- test stub signature
+        raise RuntimeError("seed simulated failure")
+
+    monkeypatch.setattr(
+        asgi_mod, "seed_financial_services_demo", _boom
+    )
+    with pytest.raises(RuntimeError, match="seed simulated failure"):
+        asgi_mod._run_seed_in_thread(_BoomState())  # type: ignore[arg-type]
