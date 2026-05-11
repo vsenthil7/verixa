@@ -68,7 +68,7 @@ sequenceDiagram
 
 **Outcome:** Action is allowed. No triad invocation. Audit entry persisted with risk score 0.05. Reconstructible later via `POST /v1/control/replay`.
 
-**Verified by:** `test_demo_seed_audit_decision_a_low_risk_allow` + `test_replay_decision_a`.
+**Verified by:** `test_seed_creates_three_audit_entries` in `apps/control-plane-api/tests/test_demo_seed.py` + the dashboard's recent-decisions row covered by Playwright `apps/control-plane-ui/tests-e2e/dashboard.spec.ts`.
 
 ---
 
@@ -114,7 +114,7 @@ sequenceDiagram
 
 **Outcome:** Allowed by triad consensus. Three verdicts + three SHA-256 commitments persist in the replay bundle. The commit-reveal protocol means no reviewer can post-hoc adjust their verdict after seeing the others'.
 
-**Verified by:** `test_demo_seed_audit_decision_b_triad_majority_allow`, `test_replay_decision_b_has_triad`, 4 live MI300X reviewer tests.
+**Verified by:** `test_seed_audit_b_is_the_triad_decision` + `test_seed_pre_generated_dossier_verifies_offline` in `apps/control-plane-api/tests/test_demo_seed.py` + the triad protocol invariants in `packages/verixa-python/tests/test_triad_orchestrator.py` + `test_triad_protocol.py` + `test_triad_reviewer.py` + 4 gated MI300X tests in `test_triad_integration.py`.
 
 ---
 
@@ -142,7 +142,7 @@ sequenceDiagram
 
 **Outcome:** Denied. Audit entry shows `triad_invoked=false` and two failed policy evaluations. Demonstrates that the system fails fast — no expensive triad call is made when policy already denies.
 
-**Verified by:** `test_demo_seed_audit_decision_c_critical_risk_deny` + `test_replay_decision_c_has_no_triad`.
+**Verified by:** `test_seed_audit_c_is_the_policy_deny` in `apps/control-plane-api/tests/test_demo_seed.py`.
 
 ---
 
@@ -166,7 +166,7 @@ sequenceDiagram
 
 **Outcome:** A new workflow exists. Agents and tools can now be registered under it.
 
-**Verified by:** `test_workflow_register_handler`.
+**Verified by:** `test_workflow_register_handler` in `apps/control-plane-api/tests/test_registry.py`.
 
 ---
 
@@ -178,7 +178,7 @@ sequenceDiagram
 
 **Outcome:** An agent is registered under the workflow. Its SPIFFE id is recorded in every audit entry the agent generates. *Phase 0: SPIFFE id is stored but not validated against a SPIRE server; Phase 1 wires real SPIRE.*
 
-**Verified by:** `test_agent_register_handler`.
+**Verified by:** `test_agent_register_handler` in `apps/control-plane-api/tests/test_registry.py`.
 
 ---
 
@@ -190,7 +190,7 @@ sequenceDiagram
 
 **Outcome:** The Tool Firewall now permits this tool when called by the right workflow with arguments inside bounds. A tool restricted to one workflow can't be called by another.
 
-**Verified by:** `test_tool_register_handler` + 7 firewall tests covering allow-list and arg-bounds checks.
+**Verified by:** `test_tool_register_handler` in `apps/control-plane-api/tests/test_registry.py` + `test_firewall_allowlist.py` + `test_firewall_arg_bounds.py` in `packages/verixa-python/tests/`.
 
 ---
 
@@ -214,7 +214,7 @@ sequenceDiagram
 
 **Outcome:** Operator gets a time-windowed slice of governance decisions. Each entry has the metadata to drive a "view detail" or "generate dossier" follow-up.
 
-**Verified by:** `test_audit_query_handler`, Playwright `audit.spec.ts` (4 specs).
+**Verified by:** `test_audit_query_handler` in `apps/control-plane-api/tests/test_audit.py` + Playwright `apps/control-plane-ui/tests-e2e/audit.spec.ts` (4 specs).
 
 ---
 
@@ -243,7 +243,7 @@ sequenceDiagram
 
 **Outcome:** Operator gets the entire decision context back — request, what the agent saw at decision time, every policy evaluation, every triad verdict + commitment. Snapshot-based, not bit-exact regeneration.
 
-**Verified by:** `test_replay_handler` + Playwright `decision-detail.spec.ts` (5 specs).
+**Verified by:** `test_replay_handler` in `apps/control-plane-api/tests/test_handlers.py` + Playwright `apps/control-plane-ui/tests-e2e/decision-detail.spec.ts` (5 specs).
 
 ---
 
@@ -255,7 +255,7 @@ sequenceDiagram
 
 **Outcome:** A `SignedDossier` is returned containing a manifest (cover + decision trail + evidence) and an Ed25519 signature over the canonical-JSON encoding of the manifest.
 
-**Verified by:** `test_dossier_generate_handler` + Playwright `dossier-viewer.spec.ts` (4 specs).
+**Verified by:** `test_dossier_generate_handler` in `apps/control-plane-api/tests/test_handlers.py` + Playwright `apps/control-plane-ui/tests-e2e/dossier-viewer.spec.ts` (4 specs).
 
 ---
 
@@ -284,7 +284,7 @@ sequenceDiagram
 
 **Outcome:** The auditor verifies the signature with any standard Ed25519 library. No network call to Verixa. No trust in Verixa's running state. The dossier is **portable evidence**.
 
-**Verified by:** `test_verify_signed_dossier_round_trip`, `tools/audit_verify.py` (standalone verifier script).
+**Verified by:** `test_verify_signed_dossier_round_trip` in `packages/verixa-python/tests/test_dossier_manifest.py` + `test_audit_verify_cli.py` (covers the standalone `tools/audit_verify.py` verifier script end-to-end).
 
 ---
 
