@@ -31,11 +31,17 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from fastapi import APIRouter, FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, FastAPI, Header, Query
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from verixa_runtime.crypto.aes_gcm import AesGcmKey, generate_key
 from verixa_runtime.crypto.ed25519 import Ed25519KeyPair, generate_keypair
+from verixa_runtime.policy import (
+    BundleNameInvalid,
+    BundleNotFound,
+    BundleServer,
+    BundleUnsigned,
+)
 from verixa_runtime.replay import (
     InMemoryAuditIndex,
     InMemoryBundleStore,
@@ -103,6 +109,11 @@ class ControlPlaneState:
     _tenant_keys: dict[uuid.UUID, AesGcmKey] = field(
         default_factory=dict, repr=False
     )
+    # CP-46: optional OPA bundle distribution server. None disables
+    # the /v1/control/policy/bundles routes (the routes return 503 in
+    # that case rather than 404 so operators can distinguish
+    # "disabled" from "no such bundle").
+    bundle_server: BundleServer | None = None
 
 
 def build_default_state(
@@ -267,6 +278,68 @@ def build_control_plane_router(state: ControlPlaneState) -> APIRouter:
             await handle_dossier_get(
                 dossier_id, dossier_store=state.dossier_store
             )
+        )
+
+    # ---- Policy bundle distribution (CP-46) ---------------------------
+
+    @router.get("/policy/bundles")
+    async def bundles_list() -> JSONResponse:
+        """List bundle names available for OPA pull."""
+        if state.bundle_server is None:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "bundle server not configured"},
+            )
+        return JSONResponse(
+            status_code=200,
+            content={"bundles": state.bundle_server.list_bundles()},
+        )
+
+    @router.get("/policy/bundles/{name}")
+    async def bundles_fetch(
+        name: str,
+        if_none_match: str | None = Header(default=None),
+    ) -> Response:
+        """Fetch a signed bundle as gzipped tar.
+
+        Returns 200 with tar.gz body + ETag header on first fetch;
+        304 if If-None-Match matches the current ETag (OPA cache hit).
+        Returns 400 / 404 / 503 with JSON body for failure modes.
+        """
+        if state.bundle_server is None:
+            return JSONResponse(
+                status_code=503,
+                content={"error": "bundle server not configured"},
+            )
+        try:
+            artifact = state.bundle_server.serve(name)
+        except BundleNameInvalid as e:
+            return JSONResponse(
+                status_code=400, content={"error": str(e)}
+            )
+        except BundleNotFound as e:
+            return JSONResponse(
+                status_code=404, content={"error": str(e)}
+            )
+        except BundleUnsigned as e:
+            return JSONResponse(
+                status_code=409, content={"error": str(e)}
+            )
+        # Strong-validator ETag match -> 304 Not Modified, no body.
+        if if_none_match is not None and if_none_match == artifact.etag:
+            return Response(
+                status_code=304, headers={"ETag": artifact.etag}
+            )
+        return Response(
+            status_code=200,
+            content=artifact.tarball,
+            media_type="application/gzip",
+            headers={
+                "ETag": artifact.etag,
+                "X-Verixa-Bundle-Signing-Key-Id": (
+                    artifact.signatures.signing_key_id
+                ),
+            },
         )
 
     return router
