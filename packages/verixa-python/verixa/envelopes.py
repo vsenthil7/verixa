@@ -41,8 +41,12 @@ Subset shipped:
     - AgentRegisterResponse
     - ToolRegisterResponse
 
-The remaining envelopes (Replay, Dossier, Webhook) follow in
-subsequent commits as the type signatures land.
+  CP-63 (replay + dossier):
+    - ReplayResponse
+    - DossierGenerateResponse + DossierGetResponse
+
+The remaining envelopes (Webhook subscription + delivery summaries)
+follow in subsequent commits as the type signatures land.
 """
 
 from __future__ import annotations
@@ -170,6 +174,48 @@ def _as_bool(value: Any, name: str) -> bool:
             f"field {name}: expected bool, got {type(value).__name__}"
         )
     return value
+
+
+def _as_dict(value: Any, name: str) -> dict[str, Any]:
+    """Strict dict; rejects None, list, primitives.
+
+    Used for nested envelope dicts that the SDK passes through opaquely
+    (the customer can drill into them or wrap with their own model).
+    """
+    if not isinstance(value, dict):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected dict, got {type(value).__name__}"
+        )
+    return value
+
+
+def _as_optional_dict(value: Any, name: str) -> dict[str, Any] | None:
+    """Like _as_dict but accepts None (for optional nested envelopes)."""
+    if value is None:
+        return None
+    return _as_dict(value, name)
+
+
+def _as_list_of_dict(value: Any, name: str) -> tuple[dict[str, Any], ...]:
+    """Parse a list-of-dicts into an immutable tuple-of-dicts.
+
+    The inner dicts pass through unparsed (each is opaque to the SDK
+    surface; e.g. retrieved_documents is a list of {doc_id, content_sha256}
+    items but ReplayResponse exposes them as plain dicts).
+    """
+    if not isinstance(value, list):
+        raise InvalidEnvelopeError(
+            f"field {name}: expected list of dicts, got {type(value).__name__}"
+        )
+    parsed: list[dict[str, Any]] = []
+    for i, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise InvalidEnvelopeError(
+                f"field {name}[{i}]: expected dict, "
+                f"got {type(item).__name__}"
+            )
+        parsed.append(item)
+    return tuple(parsed)
 
 
 # ---------------------------------------------------------------------------
@@ -474,11 +520,202 @@ class ToolRegisterResponse:
         )
 
 
+# ---------------------------------------------------------------------------
+# Replay envelopes (CP-63)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayResponse:
+    """Server response to ``GET /v1/control/replay``.
+
+    Reconstructed decision context for an audit_id. Mirrors the
+    server-side ReplayResponse: full request envelope + retrieved
+    documents + tool I/O + policy evaluations + optional triad review +
+    timestamp.
+
+    Nested dicts pass through opaquely (request_envelope is the
+    original decision payload; retrieved_documents are
+    {doc_id, content_sha256} pairs; tool_io captures every tool call
+    request+response; policy_evaluations is one entry per Rego
+    package evaluated). Customers can drill into them or wrap with
+    their own model. The collections are tuples (immutable).
+
+    triad_review is None when the decision did NOT go through triad
+    review (i.e. AuditEntry.triad_invoked was False).
+    """
+
+    audit_id: uuid.UUID
+    tenant_id: uuid.UUID
+    decision: str
+    risk_score: float
+    request_envelope: dict[str, Any]
+    retrieved_documents: tuple[dict[str, Any], ...]
+    tool_io: tuple[dict[str, Any], ...]
+    policy_evaluations: tuple[dict[str, Any], ...]
+    triad_review: dict[str, Any] | None
+    timestamp_unix_ns: int
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ReplayResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for ReplayResponse, "
+                f"got {type(data).__name__}"
+            )
+        return cls(
+            audit_id=_as_uuid(
+                _require(data, "audit_id", "audit_id"), "audit_id"
+            ),
+            tenant_id=_as_uuid(
+                _require(data, "tenant_id", "tenant_id"), "tenant_id"
+            ),
+            decision=_as_str(
+                _require(data, "decision", "decision"), "decision"
+            ),
+            risk_score=_as_float(
+                _require(data, "risk_score", "risk_score"), "risk_score"
+            ),
+            request_envelope=_as_dict(
+                _require(data, "request_envelope", "request_envelope"),
+                "request_envelope",
+            ),
+            retrieved_documents=_as_list_of_dict(
+                _require(
+                    data,
+                    "retrieved_documents",
+                    "retrieved_documents",
+                ),
+                "retrieved_documents",
+            ),
+            tool_io=_as_list_of_dict(
+                _require(data, "tool_io", "tool_io"), "tool_io"
+            ),
+            policy_evaluations=_as_list_of_dict(
+                _require(
+                    data, "policy_evaluations", "policy_evaluations"
+                ),
+                "policy_evaluations",
+            ),
+            triad_review=_as_optional_dict(
+                data.get("triad_review"), "triad_review"
+            ),
+            timestamp_unix_ns=_as_int(
+                _require(data, "timestamp_unix_ns", "timestamp_unix_ns"),
+                "timestamp_unix_ns",
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Dossier envelopes (CP-63)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class DossierGenerateResponse:
+    """Server response to ``POST /v1/control/dossier``.
+
+    Carries enough to fetch the full signed JSON via the follow-up
+    GET /v1/control/dossier/{id} call.
+    """
+
+    dossier_id: uuid.UUID
+    audit_id: uuid.UUID
+    signing_key_id: str
+    generated_at: datetime
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DossierGenerateResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for DossierGenerateResponse, "
+                f"got {type(data).__name__}"
+            )
+        return cls(
+            dossier_id=_as_uuid(
+                _require(data, "dossier_id", "dossier_id"), "dossier_id"
+            ),
+            audit_id=_as_uuid(
+                _require(data, "audit_id", "audit_id"), "audit_id"
+            ),
+            signing_key_id=_as_str(
+                _require(data, "signing_key_id", "signing_key_id"),
+                "signing_key_id",
+            ),
+            generated_at=_as_datetime(
+                _require(data, "generated_at", "generated_at"),
+                "generated_at",
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class DossierGetResponse:
+    """Server response to ``GET /v1/control/dossier/{id}``.
+
+    Carries the full SignedDossier inline so the caller can verify it
+    offline without further round-trips. signature_hex is 128 hex chars
+    (Ed25519 sig = 64 bytes = 128 hex); public_key_hex is 64 hex chars
+    (Ed25519 public key = 32 bytes = 64 hex). The manifest dict is
+    opaque to the SDK -- the caller verifies it via the verixa_runtime
+    crypto primitives.
+    """
+
+    dossier_id: uuid.UUID
+    audit_id: uuid.UUID
+    manifest: dict[str, Any]
+    signature_hex: str
+    public_key_hex: str
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> DossierGetResponse:
+        if not isinstance(data, dict):
+            raise InvalidEnvelopeError(
+                f"expected dict for DossierGetResponse, "
+                f"got {type(data).__name__}"
+            )
+        sig = _as_str(
+            _require(data, "signature_hex", "signature_hex"),
+            "signature_hex",
+        )
+        if len(sig) != 128:
+            raise InvalidEnvelopeError(
+                f"field signature_hex: expected 128 hex chars, "
+                f"got {len(sig)}"
+            )
+        pub = _as_str(
+            _require(data, "public_key_hex", "public_key_hex"),
+            "public_key_hex",
+        )
+        if len(pub) != 64:
+            raise InvalidEnvelopeError(
+                f"field public_key_hex: expected 64 hex chars, "
+                f"got {len(pub)}"
+            )
+        return cls(
+            dossier_id=_as_uuid(
+                _require(data, "dossier_id", "dossier_id"), "dossier_id"
+            ),
+            audit_id=_as_uuid(
+                _require(data, "audit_id", "audit_id"), "audit_id"
+            ),
+            manifest=_as_dict(
+                _require(data, "manifest", "manifest"), "manifest"
+            ),
+            signature_hex=sig,
+            public_key_hex=pub,
+        )
+
+
 __all__ = [
     "AgentRegisterResponse",
     "AuditEntry",
     "AuditQueryResponse",
+    "DossierGenerateResponse",
+    "DossierGetResponse",
     "InvalidEnvelopeError",
+    "ReplayResponse",
     "ToolRegisterResponse",
     "WorkflowListResponse",
     "WorkflowRegisterResponse",
