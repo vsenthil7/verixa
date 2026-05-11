@@ -551,22 +551,129 @@ async def test_agents_register_return_typed_true_returns_dataclass() -> None:
 
 @pytest.mark.asyncio
 async def test_tools_register_posts_correct_body() -> None:
+    """CP-73 corrects the CP-50 wire-format bug: server's
+    ``ToolRegisterRequest`` accepts ``name + description + is_active +
+    allowed_workflow_ids``; the CP-50 SDK sent ``workflow_id + name +
+    schema`` which the strict ``extra='forbid'`` schema rejects.
+    Tools are NOT workflow-scoped on the server -- they belong to the
+    tenant and allowed_workflow_ids is the per-tool ACL."""
     captured: dict[str, Any] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured["body"] = json.loads(request.content)
         return httpx.Response(
-            201, request=request, json={"tool_id": str(uuid.uuid4())}
+            201,
+            request=request,
+            json={
+                "tool_id": str(uuid.uuid4()),
+                "name": "transfer-funds",
+                "is_active": True,
+                "allowed_workflow_ids": [str(_WORKFLOW)],
+                "created_at": "2026-05-11T22:00:00Z",
+            },
         )
 
     async with _make_client_with_handler(handler) as c:
         await c.tools.register(
-            workflow_id=_WORKFLOW,
             name="transfer-funds",
-            schema={"type": "object"},
+            description="moves money between accounts",
+            is_active=True,
+            allowed_workflow_ids=[_WORKFLOW],
         )
     assert captured["body"]["name"] == "transfer-funds"
-    assert captured["body"]["schema"] == {"type": "object"}
+    assert captured["body"]["description"] == "moves money between accounts"
+    assert captured["body"]["is_active"] is True
+    assert captured["body"]["allowed_workflow_ids"] == [str(_WORKFLOW)]
+    # CP-73 bug-fix: legacy fields MUST NOT be sent (server rejects)
+    assert "workflow_id" not in captured["body"]
+    assert "schema" not in captured["body"]
+
+
+@pytest.mark.asyncio
+async def test_tools_register_uses_documented_defaults() -> None:
+    """Server defaults: description='', is_active=True,
+    allowed_workflow_ids=[] (any-workflow). SDK MUST match."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "tool_id": str(uuid.uuid4()),
+                "name": "x",
+                "is_active": True,
+                "allowed_workflow_ids": [],
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        await c.tools.register(name="x")
+    assert captured["body"]["description"] == ""
+    assert captured["body"]["is_active"] is True
+    assert captured["body"]["allowed_workflow_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_tools_register_allowed_workflow_ids_none_treated_as_empty() -> None:
+    """None -> [] (any-workflow) per the docstring."""
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "tool_id": str(uuid.uuid4()),
+                "name": "x",
+                "is_active": True,
+                "allowed_workflow_ids": [],
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        await c.tools.register(name="x", allowed_workflow_ids=None)
+    assert captured["body"]["allowed_workflow_ids"] == []
+
+
+@pytest.mark.asyncio
+async def test_tools_register_return_typed_true_returns_dataclass() -> None:
+    """CP-73 opt-in: ``return_typed=True`` returns
+    ``ToolRegisterResponse`` dataclass with tuple-of-UUID
+    allowed_workflow_ids (immutable)."""
+    from verixa.envelopes import ToolRegisterResponse
+
+    tool_id = uuid.uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            201,
+            request=request,
+            json={
+                "tool_id": str(tool_id),
+                "name": "transfer-funds",
+                "is_active": True,
+                "allowed_workflow_ids": [str(_WORKFLOW)],
+                "created_at": "2026-05-11T22:00:00Z",
+            },
+        )
+
+    async with _make_client_with_handler(handler) as c:
+        result = await c.tools.register(
+            name="transfer-funds",
+            allowed_workflow_ids=[_WORKFLOW],
+            return_typed=True,
+        )
+    assert isinstance(result, ToolRegisterResponse)
+    assert result.tool_id == tool_id
+    assert result.name == "transfer-funds"
+    assert result.is_active is True
+    assert result.allowed_workflow_ids == (_WORKFLOW,)
+    assert isinstance(result.allowed_workflow_ids, tuple)
 
 
 @pytest.mark.asyncio

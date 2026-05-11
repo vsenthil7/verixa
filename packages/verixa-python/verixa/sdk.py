@@ -58,6 +58,7 @@ import httpx
 
 from verixa.envelopes import (
     AgentRegisterResponse,
+    ToolRegisterResponse,
     WorkflowListResponse,
     WorkflowRegisterResponse,
 )
@@ -355,25 +356,79 @@ class AgentsClient(_SubClient):
 
 
 class ToolsClient(_SubClient):
-    """Tool registration."""
+    """Tool registration.
+
+    CP-73 corrects the CP-50 wire-format bug: server's
+    ``ToolRegisterRequest`` accepts ``name + description + is_active +
+    allowed_workflow_ids``; the CP-50 SDK sent ``workflow_id + name +
+    schema`` which the strict ``extra='forbid'`` schema rejects. Tools
+    are NOT workflow-scoped on the server -- they belong to the tenant
+    and ``allowed_workflow_ids`` is the per-tool ACL (empty list =
+    any-workflow; non-empty = restricted to those workflows). The
+    ``schema`` field is not part of the wire format; per-tool JSON
+    schema lives on the agent side. Adds opt-in ``return_typed=True``
+    overload that returns ``ToolRegisterResponse`` instead of plain dict.
+    """
+
+    @overload
+    async def register(
+        self,
+        *,
+        name: str,
+        description: str = ...,
+        is_active: bool = ...,
+        allowed_workflow_ids: list[uuid.UUID] | None = ...,
+        return_typed: Literal[True],
+    ) -> ToolRegisterResponse: ...
+
+    @overload
+    async def register(
+        self,
+        *,
+        name: str,
+        description: str = ...,
+        is_active: bool = ...,
+        allowed_workflow_ids: list[uuid.UUID] | None = ...,
+        return_typed: Literal[False] = ...,
+    ) -> dict[str, Any]: ...
 
     async def register(
         self,
         *,
-        workflow_id: uuid.UUID,
         name: str,
-        schema: dict[str, Any],
-    ) -> dict[str, Any]:
-        return await _request_json(
+        description: str = "",
+        is_active: bool = True,
+        allowed_workflow_ids: list[uuid.UUID] | None = None,
+        return_typed: bool = False,
+    ) -> dict[str, Any] | ToolRegisterResponse:
+        """Register a tool the agent may invoke (subject to firewall).
+
+        Args:
+            name: 1..200 chars, the tool name.
+            description: free-text description; defaults to empty.
+            is_active: whether the tool is enabled at registration time;
+                defaults to True.
+            allowed_workflow_ids: per-tool ACL. None or empty list means
+                any-workflow; non-empty restricts the tool to the listed
+                workflows.
+            return_typed: if True, returns ``ToolRegisterResponse``
+                dataclass instead of a dict.
+        """
+        ids = allowed_workflow_ids or []
+        data = await _request_json(
             self._http,
             "POST",
             "/v1/control/tools",
             json={
-                "workflow_id": str(workflow_id),
                 "name": name,
-                "schema": schema,
+                "description": description,
+                "is_active": is_active,
+                "allowed_workflow_ids": [str(i) for i in ids],
             },
         )
+        if return_typed:
+            return ToolRegisterResponse.from_dict(data)
+        return data
 
 
 class AuditClient(_SubClient):
