@@ -8,7 +8,6 @@ might pass to a filesystem or URL builder. In Verixa Phase 0 the
 fields most at risk are:
   - doc_id in RetrievedDocument
   - tool_name in GovernAction
-  - policy_id and policy_package strings in the response envelope
   - role and spiffe_id in AgentIdentity
 
 The envelope schema does NOT itself touch the filesystem -- it's a
@@ -17,20 +16,17 @@ let downstream consumers (storage, dossier filename, MinIO key)
 apply their own escaping". These tests document that the envelope
 layer DOES preserve verbatim, so downstream consumers KNOW they must
 escape; AND that fields with strict schemas (hash, prompt_hash,
-risk_score) cannot be smuggled with path-traversal sequences.
-
-Adversarial payloads exercised:
-  - "../" (POSIX path-traversal)
-  - "..\\\\" (Windows path-traversal)
-  - "%2e%2e%2f" (URL-encoded ../)
-  - absolute paths: "/etc/passwd", "C:\\\\Windows\\\\System32"
-  - null-byte truncation: "safe.txt\\x00../../../etc/passwd"
-  - long traversal chains: "../" * 100
+UUID) cannot be smuggled with path-traversal sequences; AND that
+very-long traversal payloads are length-capped at the validator.
 
 Adversarial framing: an attacker controls one string field
 (doc_id or tool_name) and tries to escape into "wrong directory"
 when the dossier generator writes a per-bundle file or when MinIO
 keys are constructed.
+
+CP-30 RED at 3b884ad: doc_id has a length cap; 100-element
+traversal chain is rejected. This GREEN commit moves the long-chain
+case to its own rejection-asserting test.
 """
 
 from __future__ import annotations
@@ -64,7 +60,6 @@ _WF_ID = uuid.UUID("99999999-9999-9999-9999-999999999999")
         "%2e%2e%2fetc%2fpasswd",  # URL-encoded
         "/etc/passwd",
         "C:\\Windows\\System32\\config",
-        "..\\" * 100,  # very long traversal chain
         "doc.txt\x00../../../etc/passwd",  # null-byte truncation
     ],
 )
@@ -76,6 +71,15 @@ def test_path_traversal_in_doc_id_preserved_verbatim(payload: str) -> None:
     storage-layer tests not here."""
     rd = RetrievedDocument(doc_id=payload, hash="a" * 64)
     assert rd.doc_id == payload
+
+
+def test_extremely_long_traversal_chain_in_doc_id_rejected() -> None:
+    """A 400+ char traversal chain in doc_id is rejected by the
+    doc_id length cap. Defence against size-bomb-via-traversal-chain
+    attack. Discovered as CP-30 RED at 3b884ad."""
+    payload = "..\\" * 100  # 400 chars
+    with pytest.raises(ValidationError, match="too_long|too long"):
+        RetrievedDocument(doc_id=payload, hash="a" * 64)
 
 
 @pytest.mark.parametrize(
